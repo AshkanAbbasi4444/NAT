@@ -98,6 +98,7 @@ pre{margin:0;height:calc(100vh - var(--barh,52px));overflow:auto;background:#FBF
 .c.stale,.c.junk{color:#A0A7AE}
 .c.sys{background:#F7F8F9;color:#9AA1A8}
 .c.none{border-style:dotted}
+.c.lib::after{content:"";position:absolute;left:3px;right:3px;bottom:2px;height:2px;border-radius:1px;background:var(--ink)}
 .r.hdr>.a,.r.hdr>.nm,.r.hdr>.vl{color:#A0A7AE}
 .gapr{color:var(--muted);font-size:10.5px;padding:3px 0 4px calc(var(--ac) + 8px)}
 .heap{display:flex;flex-direction:column;gap:12px;align-items:flex-start}
@@ -186,6 +187,7 @@ svg.arrows path.hoparrow{stroke:#1F5FA0;stroke-width:3.4;animation:hopin .35s bo
 .wr td b{color:var(--ink)}
 .wr tr{cursor:pointer}
 .wr tr:hover td,.wr tr.on td{color:var(--reach)}
+.wlib{font:600 10.5px var(--sans);color:var(--ink);background:#EEF2F7;border-radius:6px;padding:0 5px;margin-left:6px}
 .r.watched,.card.watched{position:relative;box-shadow:inset 3px 0 0 var(--ink)}
 .r.watched::before,.card.watched::before{content:attr(data-w);position:absolute;right:-8px;top:-8px;background:var(--ink);color:#fff;font:700 10px/15px var(--sans);padding:0 6px;border-radius:8px;z-index:2}
 .ladder .lw{float:right;margin:-2px 10px 0 0;font-size:12px;padding:2px 9px}
@@ -226,6 +228,7 @@ button.icon{width:30px;padding:4px 0;font-weight:700;border-radius:50%}
 .sw.hatch{background:repeating-linear-gradient(135deg,#fff 0 3px,#E6EAEE 3px 4.5px)}
 .sw.hdr{background:#EEF1F4;color:var(--faint)}
 .sw.alloc{border:1px dashed var(--faint);color:var(--faint)}
+.sw.lib{box-shadow:inset 0 -3px 0 #fff,inset 0 -5px 0 var(--ink)}
 .sw.line{width:54px;border:0;border-radius:3px;background:var(--amb);box-shadow:inset 3px 0 0 var(--ambInk)}
 .sw.line.nx{background:#EEF2F7;box-shadow:inset 3px 0 0 #7C8BA1}
 .sw.txt{border:0;width:auto;background:none;font-weight:700}
@@ -295,6 +298,7 @@ button.icon{width:30px;padding:4px 0;font-weight:700;border-radius:50%}
   <div class="hrow"><svg width="56" height="22" aria-hidden="true"><path d="M3,11 H46" stroke="#B45309" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/><path d="M44,7 L52,11 L44,15 L46,11z" fill="#B45309"/></svg><span>At a call: where a parameter's value came from. After a return: where the value goes</span></div>
   <div class="hrow"><span class="sw lost"></span><span>Leaked: nothing points to it any more</span></div>
   <div class="hrow"><span class="sw freed"></span><span>Freed: given back with free()</span></div>
+  <div class="hrow"><span class="sw txt" style="font-size:10px">free() wrote…</span><span>Under a card: a library call wrote into this block on this line (a gdb watchpoint caught it)</span></div>
   <div class="hrow"><span class="sw txt">??</span><span>Not set yet: whatever bytes were left there</span></div>
   <div class="hrow"><svg width="56" height="22" aria-hidden="true"><rect x="2" y="4" width="8" height="14" rx="2" fill="#BFDBFE"/><rect x="14" y="4" width="8" height="14" rx="2" fill="#93C5FD"/><rect x="26" y="4" width="8" height="14" rx="2" fill="#3B82F6"/><rect x="38" y="4" width="8" height="14" rx="2" fill="#1D4ED8"/></svg><span>Bar on the left of a box: how many hops away it is (own, 1, 2, 3+)</span></div>
   <div class="hrow"><svg width="56" height="22" aria-hidden="true"><rect x="2" y="2" width="5" height="18" rx="2.5" fill="#334155"/><rect x="16" y="2" width="5" height="18" rx="2.5" fill="#0F766E"/><rect x="30" y="2" width="5" height="18" rx="2.5" fill="#6D28D9"/></svg><span>Each function has its own colour; main is always slate</span></div>
@@ -306,11 +310,13 @@ button.icon{width:30px;padding:4px 0;font-weight:700;border-radius:50%}
   <div class="hrow"><span class="spm rz" style="position:static">red zone</span><span>Below rsp. A function that calls nothing may keep its locals here</span></div>
   <h3>Watches</h3>
   <div class="hrow"><span class="wk" style="justify-self:start">W1</span><span>A box you're watching</span></div>
+  <div class="hrow"><span class="wlib" style="margin:0">inside free()</span><span>In a watch's history: this change happened inside a library call</span></div>
   <h3>Memory layout</h3>
   <div class="hrow"><span class="sw bytes amb">0a</span><span>A byte that changed</span></div>
   <div class="hrow"><span class="sw bytes hatch"></span><span>Padding: bytes no variable uses</span></div>
   <div class="hrow"><span class="sw bytes hdr">21</span><span>malloc's header, above each block</span></div>
   <div class="hrow"><span class="sw bytes alloc">59</span><span>The allocator's, after free()</span></div>
+  <div class="hrow"><span class="sw bytes lib">2a</span><span>Written inside a library call like free() or memset(): a real gdb watchpoint caught it</span></div>
   <div class="hrow"><span class="sw txt">+0…+7</span><span>8 bytes a row, lowest address on the left (little-endian)</span></div>
   <h3>Code</h3>
   <div class="hrow"><span class="sw line"></span><span>The line that just ran</span></div>
@@ -807,6 +813,72 @@ function leakHTML(s){
   return `<div class="ladder leak"><div class="lt">Leak report <span>at the end of the trace</span></div>${body}</div>`;
 }
 
+/* ---------- gdb watchpoints: bytes a library call (free, malloc, memset …) wrote into your memory ---------- */
+function libBytes(s){                                              /* byte address -> {func, in, old, now}, for this step */
+  if(s._lib) return s._lib;
+  const M=new Map();
+  (s.lib||[]).forEach(c=>(c.writes||[]).forEach(w=>{ const o=hx(w.old), n=hx(w.new);
+    for(let k=0;k<(w.size||8);k++) if(o[k]!==n[k]){ const was=M.get(w.addr+k); M.set(w.addr+k,{func:c.func,in:w.in,old:was?was.old:o[k],now:n[k]}); } }));
+  Object.defineProperty(s,"_lib",{value:M});                      /* not saved with the trace */
+  return M;
+}
+function libIn(s,a,size){                                          /* did a library call write into [a, a+size) on this step? */
+  const M=libBytes(s); let n=0, func=null;
+  for(let k=0;k<size;k++){ const b=M.get(a+k); if(b){ n++; func=func||b.func; } }
+  return n?{n,func}:null;
+}
+const libTip=(s,a,size)=>{ const w=libIn(s,a,size); return w?`\n${w.func}() wrote ${w.n} byte${w.n===1?"":"s"} here on this line: a gdb watchpoint caught it`:""; };
+function keyRange(s,key){                                          /* [start, end) of a box: v:addr, b:addr or h:addr:field */
+  const b=key&&boxIn(s,key); if(!b) return null;
+  if(b.v) return [b.v.addr,b.v.addr+(b.v.size||8)];
+  if(b.fd) return b.fd.offset==null?null:[b.n.addr+b.fd.offset,b.n.addr+b.fd.offset+(b.fd.size||8)];
+  return [b.n.addr,b.n.addr+(b.n.size||16)];
+}
+function freeWrites(s,n){                                          /* the words free() wrote into block n, as a watchpoint saw them */
+  const ws=(s.lib||[]).filter(c=>c.func==="free"&&c.arg===n.addr).flatMap(c=>c.writes||[]);
+  const w=[...new Set(ws.map(x=>Math.floor((x.addr-n.addr)/8)).filter(k=>k>=0&&k*8<(n.size||16)))].sort((x,y)=>x-y);
+  return w.length?w:null;
+}
+function libWords(i){                                              /* "Inside free(), a gdb watchpoint caught …", for the words panel */
+  const S=TRACE.steps[i], P=TRACE.steps[i-1], out=[];
+  const fieldTxt=(n,fd)=>!n||!fd?"?":fd.kind==="ptr"?show(fd.value):fd.kind==="int"?String(fd.value):(arrText(fd.type,fd.size,fieldHex(n,fd),20)||"—");
+  (S.lib||[]).forEach(c=>{
+    const groups=new Map(), fn=kc(c.func+"()");
+    (c.writes||[]).forEach(w=>{ const o=hx(w.old), nw=hx(w.new), ks=[];
+      for(let k=0;k<8;k++) if(o[k]!==nw[k]) ks.push(w.addr+k);
+      if(!ks.length) return;
+      let t={key:"m:"+ks[0],a:ks[0]};                                /* whose bytes: a heap block, its header, or a variable */
+      for(const st of [S,P]){ if(t.n||t.v) break;
+        for(const n of st.heap){ if(ks[0]>=n.addr&&ks[0]<n.addr+(n.size||16)){ t={key:"b:"+n.addr,n}; break; }
+          if(ks[0]>=n.addr-16&&ks[0]<n.addr){ t={key:"hd:"+n.addr,hd:n}; break; } }
+        if(!t.n&&!t.hd) for(const f of st.frames){ const v=f.vars.find(v=>v.addr&&ks[0]>=v.addr&&ks[0]<v.addr+(v.size||8)); if(v){ t={key:"v:"+v.addr,v}; break; } } }
+      const g=groups.get(t.key)||{t,bytes:[]}; g.bytes.push(...ks); groups.set(t.key,g); });
+    groups.forEach(({t,bytes})=>{
+      if(t.n){
+        const pn=P.heap.find(b=>b.addr===t.n.addr), sn=S.heap.find(b=>b.addr===t.n.addr)||t.n, at=kc(show(t.n.addr));
+        const words=[...new Set(bytes.map(a=>Math.floor((a-t.n.addr)/8)))].sort((x,y)=>x-y), rng=k=>`+${k*8}…+${k*8+7}`;
+        const hit=fd=>fd.offset!=null&&bytes.some(a=>a-t.n.addr>=fd.offset&&a-t.n.addr<fd.offset+fd.size);
+        const old=(pn&&!pn.freed?pn.fields||[]:[]).filter(hit).map(fd=>fd.name);
+        if(c.func==="free"&&c.arg===t.n.addr){
+          const say=words.map(k=>k===0?`bytes ${kc(rng(k))} became a link to the next free block`:k===1?`bytes ${kc(rng(k))} became a random key that catches a double free`:`bytes ${kc(rng(k))} changed`);
+          out.push(`Inside ${fn}, a gdb watchpoint caught free() writing into the block at ${at}: ${say.join(", and ")}.`+(old.length?` So the old ${old.map(kc).join(" and ")} ${old.length===1?"is":"are"} overwritten.`:""));
+        } else if(/^(malloc|calloc|realloc)$/.test(c.func)&&pn&&pn.freed){
+          out.push(`Inside ${fn}, a gdb watchpoint caught ${c.func}() writing bytes ${words.map(k=>kc(rng(k))).join(" and ")} of the block at ${at}${words.includes(1)?" (it clears the old double-free key)":""}.`+
+            ` This block is recycled: free() had it before, so its other bytes are leftovers.`);
+        } else {
+          const fs=(sn.fields||[]).filter(hit);
+          out.push(`Inside ${fn}, a gdb watchpoint caught a write into the block at ${at}`+(fs.length&&!sn.freed?`: `+fs.map(fd=>{ const pf=pn&&(pn.fields||[]).find(x=>x.name===fd.name);
+            return `its ${kc(fd.name)} went from ${kc(fieldTxt(pn,pf))} to ${kc(fieldTxt(sn,fd))}`; }).join(", ")+".":`, bytes ${words.map(k=>kc(rng(k))).join(" and ")}.`));
+        }
+      }
+      else if(t.hd) out.push(`Inside ${fn}, a gdb watchpoint caught a write into malloc's header just above the block at ${kc(show(t.hd.addr))}.`);
+      else if(t.v){ const key="v:"+t.v.addr; out.push(`Inside ${fn}, a gdb watchpoint caught a write to ${kc(boxName(S,key,S.frames[0]?S.frames[0].func:""))}: ${kc(boxVal(P,key))} → ${kc(boxVal(S,key))}.`); }
+      else out.push(`Inside ${fn}, a gdb watchpoint caught a write at ${kc(show(t.a))}.`);
+    });
+  });
+  return out;
+}
+
 /* ---------- watches: follow one expression through the whole trace, like gdb's watch ---------- */
 let WATCH=[], WFN="", WEX="", WONLY=false;
 try{ WATCH=JSON.parse(localStorage.getItem("mv.watch")||"[]").filter(w=>w&&w.ex); }catch(e){ WATCH=[]; }
@@ -822,8 +894,10 @@ function watchAt(w,s){                                           /* its value on
   return {txt,key:r.key};
 }
 function watchHistory(w){                                        /* every step's value, and the steps where it changed */
-  w.vals=TRACE.steps.map(s=>watchAt(w,s)); w.mode=simple; w.ch=[];
-  for(let i=1;i<w.vals.length;i++) if(w.vals[i].txt!==w.vals[i-1].txt) w.ch.push(i);
+  w.vals=TRACE.steps.map(s=>watchAt(w,s)); w.mode=simple; w.ch=[]; w.lib={};
+  for(let i=1;i<w.vals.length;i++) if(w.vals[i].txt!==w.vals[i-1].txt){ w.ch.push(i);
+    const S=TRACE.steps[i], k=w.vals[i].key||w.vals[i-1].key, r=keyRange(S,k)||keyRange(TRACE.steps[i-1],k), lw=r&&libIn(S,r[0],r[1]-r[0]);
+    if(lw) w.lib[i]=lw.func; }                                     /* a gdb watchpoint saw a library call change it */
 }
 const WCH=()=>new Set(WATCH.flatMap(w=>w.ch||[]));
 function addWatch(fn,ex){
@@ -842,14 +916,14 @@ function renderWatch(){
   $("wnote").textContent=WATCH.length?"":"Pick a function and an expression, like head, *head, head->next or vals[2].";
   const N=TRACE.steps.length;
   $("wlist").innerHTML=WATCH.map((w,k)=>{
-    if(!w.vals||w.mode!==simple||w.vals.length!==N) watchHistory(w);
+    if(!w.vals||!w.lib||w.mode!==simple||w.vals.length!==N) watchHistory(w);
     const v=w.vals[at], now=w.ch.includes(at), fc=w.fn?fcol(w.fn)[0]:MUT;
     const vals=w.ch.filter(i=>!w.vals[i].off&&!w.vals[i-1].off).length;
     const tick=i=>{ const x=(N>1?i/(N-1):0)*1000, off=w.vals[i].off||w.vals[i-1].off;
-      return `<rect data-go="${i}" x="${x-3}" y="3" width="6" height="12" rx="1.5" fill="${off?"#C8D2DE":AMB}"><title>step ${i+1}: ${esc(w.vals[i-1].txt)} → ${esc(w.vals[i].txt)}</title></rect>`; };
+      return `<rect data-go="${i}" x="${x-3}" y="3" width="6" height="12" rx="1.5" fill="${off?"#C8D2DE":AMB}"><title>step ${i+1}: ${esc(w.vals[i-1].txt)} → ${esc(w.vals[i].txt)}${w.lib[i]?` (inside ${esc(w.lib[i])}())`:""}</title></rect>`; };
     const cx=(N>1?at/(N-1):0)*1000;
     const hist=w.ch.slice(0,300).map(i=>{ const RA=ranAt(i);
-      return `<tr data-go="${i}"${i===at?' class="on"':""}><td>step ${i+1}</td><td>line ${RA?RA.line:TRACE.steps[i].line}</td><td>${esc(w.vals[i-1].txt)} → <b>${esc(w.vals[i].txt)}</b></td></tr>`; }).join("");
+      return `<tr data-go="${i}"${i===at?' class="on"':""}><td>step ${i+1}</td><td>line ${RA?RA.line:TRACE.steps[i].line}</td><td>${esc(w.vals[i-1].txt)} → <b>${esc(w.vals[i].txt)}</b>${w.lib[i]?`<span class="wlib" title="a gdb watchpoint caught this write">inside ${esc(w.lib[i])}()</span>`:""}</td></tr>`; }).join("");
     return `<div class="wr">`+
       `<span class="wt"><span class="wk">W${k+1}</span><code>${esc(w.ex)}</code><span class="wf" style="color:${fc}">${w.fn?`in ${esc(w.fn)}`:"in the running function"}</span></span>`+
       `<span class="wv${now?" now":""}${v.off?" off":""}${v.bad?" bad":""}">${esc(v.txt)}</span>`+
@@ -1037,6 +1111,8 @@ function lineWords(i){
     else if(/^}/.test(code)) say(`Goes to line ${S.line}.`);
     else { const ch=[...touched(i).ch].filter(k=>k.startsWith("v:")||/^h:\d+:/.test(k));
       if(ch.length) say(ch.slice(0,4).map(k=>`${kc(boxName(S,k,fn))} is now ${kc(boxVal(S,k))}`).join(", ")+"."); } }
+  /* what a library call did inside, as gdb's watchpoints saw it */
+  libWords(i).forEach(say);
   /* what it left behind */
   const Rp=reachAt(i-1), Rs=reachAt(i);
   S.heap.forEach(n=>{ if(!n.freed&&Rp.has(n.addr)&&!Rs.has(n.addr)) say(`Nothing points to ${kc(show(n.addr))} any more: it's leaked.`); });
@@ -1096,7 +1172,7 @@ function renderCards(s){
         return;
       }
       const v=sl.v, SLOTW2=sl.w, key="v:"+v.addr, C=CH.has(key), I=!C&&TT.inv.has(key), F=TT.on&&!C&&!I, rc=RC[key], ci=CI[key], hd=RC._D?RC._D[key]:undefined, out=hd===undefined&&!!inner;
-      const role=`\n${v.arg?"parameter":"local"} of ${f.func}${v.decl?`, declared on line ${v.decl}`:""}`+(ci?`\n${ci.text}`:"")+(out?`\n${inner.func} can't reach this box`:"");
+      const role=`\n${v.arg?"parameter":"local"} of ${f.func}${v.decl?`, declared on line ${v.decl}`:""}`+(ci?`\n${ci.text}`:"")+(out?`\n${inner.func} can't reach this box`:"")+(v.addr?libTip(s,v.addr,v.size||8):"");
       const val=v.init===false?"??":v.kind==="int"?String(v.value):v.kind==="other"?(arrText(v.type,v.size,v.bytes,22)||"—"):(v.value===null?"—":show(v.value));   /* ?? only means: not set yet */
       pos[key]={x:bx+SLOTW2/2,y:by+SLOTH,C,I,F,who:(f===inner?"":f.func+"'s ")+v.name};
       o+=`<g data-box="${key}" data-lad="${v.addr}|${esc(f.func)}|${esc(v.name)}" data-tip="${esc(v.name+" ("+v.type+")"+role+"\nreal address "+real(v.addr)+"\nvalue "+(v.value===null?"??":real(v.value))+(v.init===false?"\nnot set yet: leftover bytes":"")+reachTip(rc,inner.func))}"${F?DIM:""}>`+
@@ -1167,7 +1243,7 @@ function renderCards(s){
     const C=freed?CH.has("h:"+n.addr+":freed"):n.fields.some(f=>CH.has("h:"+n.addr+":"+f.name)), I=!C&&TT.inv.has("b:"+n.addr), F=TT.on&&!C&&!I;
     cx[n.addr]=bx;
     const cStroke=C?AMB:freed?DEAD:lost?BAD:I?INK:BORDER, band=freed?"#EDF1F5":lost?"#FBE9E9":C?"#FCEBC2":"#EEF2F7", at=show(n.addr), tw=at.length*7.4+18;
-    o+=`<g data-box="b:${n.addr}" data-tip="${esc("real address "+real(n.addr)+"\n"+n.type+reachTip(rb,inner?inner.func:"")+(out?`\n${inner.func} can't reach this block`:""))}"${F?DIM:""}>`+
+    o+=`<g data-box="b:${n.addr}" data-tip="${esc("real address "+real(n.addr)+"\n"+n.type+reachTip(rb,inner?inner.func:"")+(out?`\n${inner.func} can't reach this block`:"")+libTip(s,n.addr,n.size||16))}"${F?DIM:""}>`+
       (freed||lost?"":`<rect x="${bx+4}" y="${HY+4}" width="${CW}" height="${CARDH}" rx="10" fill="#DCE4EE"/>`)+                        /* a card lying on the paper */
       `<path d="M${bx+8},${HY+2} V${HY-11} Q${bx+8},${HY-17} ${bx+14},${HY-17} H${bx+8+tw-6} Q${bx+8+tw},${HY-17} ${bx+8+tw},${HY-11} V${HY+2} Z" fill="${band}" stroke="${cStroke}" stroke-width="${C||I?2:1}" ${(lost||freed)?'stroke-dasharray="4 3"':""}/>`+
       `<rect x="${bx}" y="${HY}" width="${CW}" height="${CARDH}" rx="10" fill="${freed?PNL:lost?"#FEF6F6":out?"#F3F5F8":"#fff"}" stroke="${cStroke}" stroke-width="${C||I?2.2:1}" ${(lost||freed)?'stroke-dasharray="5 4"':""}/>`+
@@ -1191,7 +1267,9 @@ function renderCards(s){
          (rf?`<text x="${bx+11}" y="${fy+30}" font-size="10" fill="${MUT}" ${MONO}${EX(rf.v)}>change: <tspan fill="${REACH}">${esc(rf.v)} = …;</tspan></text>`:"")+
          (faTxt&&(!rf||rf.v.length<=17)?`<text x="${bx+CW-10}" y="${fy+30}" font-size="10" text-anchor="end" fill="${FAINT}" ${MONO}>at ${faTxt}</text>`:"")+`</g>`;
     });
-    o+=(lost?`<text x="${bx+CW/2}" y="${HY+CARDH+14}" font-size="10" font-weight="700" text-anchor="middle" fill="${BAD}">unreachable — leaked</text>`:"")+`</g>`;
+    const lw=libIn(s,n.addr,n.size||16);                          /* a library call wrote into it on this line */
+    o+=(lost?`<text x="${bx+CW/2}" y="${HY+CARDH+14}" font-size="10" font-weight="700" text-anchor="middle" fill="${BAD}">unreachable — leaked</text>`:"")+
+      (lw?`<text x="${bx+CW/2}" y="${HY+CARDH+(lost?28:14)}" font-size="10" font-weight="700" text-anchor="middle" fill="${INK}" data-tip="${esc(`a gdb watchpoint caught ${lw.func}() writing ${lw.n} byte${lw.n===1?"":"s"} into this block, inside the library`)}">${esc(lw.func)}() wrote ${lw.n} byte${lw.n===1?"":"s"} here</text>`:"")+`</g>`;
   });
   const label=(tx,x0,y0,col)=>{ const hw=tx.length*3.3+5, lx=Math.max(16+hw,Math.min(W-16-hw,x0));
     return `<rect x="${lx-hw}" y="${y0-12}" width="${2*hw}" height="16" rx="5" fill="#fff" opacity="0.94"/>`+
@@ -1300,9 +1378,10 @@ function markAllocator(t){                                       /* freed blocks
   t.steps.forEach(s=>s.heap.forEach(n=>{
     if(!n.freed){ if(n.bytes) live[n.addr]=n.bytes; delete took[n.addr]; return; }
     if(!took[n.addr]){
+      const seen=freeWrites(s,n);                                  /* a gdb watchpoint saw them: no guessing */
       const was=live[n.addr]||"", now=n.bytes||"", w=[];
       for(let i=0;i*16<now.length;i++) if(was.slice(i*16,i*16+16)!==now.slice(i*16,i*16+16)) w.push(i);
-      took[n.addr]=was&&w.length?w:[0,1];
+      took[n.addr]=seen||(was&&w.length?w:[0,1]);
     }
     n.alloc=took[n.addr];
   }));
@@ -1421,13 +1500,16 @@ function renderMem(s){
   const M=memModel(s), P=at>0?memModel(TRACE.steps[at-1]):null, R=reachable(s), RET=retInfo(s), LLm=listLines(s), prevPtr={};
   if(P) [...P.frames.flatMap(f=>f.rows),...P.blocks.flatMap(b=>b.rows)].forEach(r=>(r.ptrs||[]).forEach(p=>prevPtr[p.k]=p.to));   /* where each pointer pointed a step ago */
   let k=0, ri=0; ARROWS=[];
+  const LB=libBytes(s);
   const cell=c=>{
     if(!c) return `<i class="c gap" data-tip="not part of any variable"></i>`;
     if(c.cls==="none") return `<i class="c none" data-tip="past the end of the struct"></i>`;
-    const old=P?(c.hdr?P.hdr:P.bytes).get(c.a):undefined, hot=!!P&&(c.hdr?old!==undefined&&old!==c.h:old!==c.h);
-    const tip=`byte at ${real(c.a)}`+(hot?`\nwas ${old===undefined?"not on screen":old}`:"");
-    return hot?`<i class="c chg ${c.cls||""}" style="--k:${k++}" data-tip="${tip}"><b class="o">${old||""}</b><b class="n">${c.h}</b></i>`
-              :`<i class="c ${c.cls||""}" data-tip="${tip}">${c.h}</i>`;
+    const old=P?(c.hdr?P.hdr:P.bytes).get(c.a):undefined, hot=!!P&&(c.hdr?old!==undefined&&old!==c.h:old!==c.h), lb=LB.get(c.a);
+    const tip=`byte at ${real(c.a)}`+(hot?`\nwas ${old===undefined?"not on screen":old}`:"")+
+      (lb?`\nwritten inside ${lb.func}()${lb.in&&lb.in!==lb.func?`, in ${lb.in}`:""}: a gdb watchpoint caught it`:"");
+    const cls=(c.cls||"")+(lb?" lib":"");
+    return hot?`<i class="c chg ${cls}" style="--k:${k++}" data-tip="${esc(tip)}"><b class="o">${old||""}</b><b class="n">${c.h}</b></i>`
+              :`<i class="c ${cls}" data-tip="${esc(tip)}">${c.h}</i>`;
   };
   const row=r=>{
     const k0=k, id=ri++, cells=r.cells.map(cell).join(""), hot=k>k0;
@@ -1460,7 +1542,8 @@ function renderMem(s){
   hp=hp.sort((p,q)=>p[0]-q[0]).map(x=>x[1]).join("");
   const d=Math.max(12,Math.min(70,(timer?300:1000)/Math.max(1,k)));
   ADELAY=timer||!k?0:Math.round((k-1)*d+220);                           /* changed arrows draw once their bytes are in */
-  return `<div class="mem${simple?"":" real"}" style="--d:${Math.round(d)}ms">${LEGEND}<div class="cols"><div class="stk"><h2>Stack<span>high addresses on top, grouped by function</span></h2>${st||`<div class="note">no variables</div>`}</div><div class="hp"><h2>Heap<span>malloc's 16-byte header in grey on top</span></h2>${LLm.map(l=>`<div class="lists${l.bad?" bad":""}"><b>${esc(l.names)}:</b> ${esc(l.text)} ${l.count?`<span>(${l.count} node${l.count===1?"":"s"})</span>`:""}</div>`).join("")}<div class="heap">${hp||`<div class="note">no heap blocks yet</div>`}</div></div></div></div>`;
+  const LIBL=TRACE.watchpoints!==undefined?`<div class="legend" style="margin-top:4px"><span><i class="c lib">2a</i>${TRACE.watchpoints?"written inside a library call like free(): a gdb watchpoint caught it":"gdb watchpoints didn't work on this computer, so writes inside library calls aren't marked"}</span></div>`:"";
+  return `<div class="mem${simple?"":" real"}" style="--d:${Math.round(d)}ms">${LEGEND}${LIBL}<div class="cols"><div class="stk"><h2>Stack<span>high addresses on top, grouped by function</span></h2>${st||`<div class="note">no variables</div>`}</div><div class="hp"><h2>Heap<span>malloc's 16-byte header in grey on top</span></h2>${LLm.map(l=>`<div class="lists${l.bad?" bad":""}"><b>${esc(l.names)}:</b> ${esc(l.text)} ${l.count?`<span>(${l.count} node${l.count===1?"":"s"})</span>`:""}</div>`).join("")}<div class="heap">${hp||`<div class="note">no heap blocks yet</div>`}</div></div></div></div>`;
 }
 let ARROWS=[], ADELAY=0;
 function drawArrows(anim){                                       /* each pointer row -> the row whose address it holds */

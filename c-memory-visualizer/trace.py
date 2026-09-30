@@ -1,4 +1,4 @@
-import gdb, json, os
+import gdb, json, os, re
 
 START     = "main"
 MAX_STEPS = 4000
@@ -6,9 +6,14 @@ NODE_MAX  = 64
 CHUNK_MAX = 200
 FRAME_MAX = 512                        # most bytes of one stack frame to record
 STDOUT    = "prog_stdout.txt"
+WATCH_MAX = 4                          # x86-64 CPUs have 4 hardware watchpoints, 8 bytes each
 
 steps, KNOWN, FREED = [], {}, set()   # KNOWN: addr -> struct name
 ALLOCED = set()                        # every address malloc/calloc/realloc handed to the program
+FREE_ORDER = []                        # addresses in the order free() got them, newest last
+LIBCALLS = []                          # library calls since the last snapshot, and what the watchpoints caught
+WPS = []                               # the watchpoints armed right now
+watch_ok = True                        # False once the CPU refuses a hardware watchpoint
 our_file = None
 
 def is_ptr(t):  return t.strip_typedefs().code == gdb.TYPE_CODE_PTR
@@ -43,9 +48,107 @@ class Malloc(gdb.Breakpoint):                     # malloc, calloc and realloc a
 class Free(gdb.Breakpoint):
     def __init__(self): super().__init__("free", internal=True)
     def stop(self):
-        try: FREED.add(int(gdb.parse_and_eval("$rdi")))
+        try:
+            a = int(gdb.parse_and_eval("$rdi")); FREED.add(a); FREE_ORDER.append(a)
         except Exception: pass
         return False
+
+# ---- real gdb watchpoints: catch what a library call (free, malloc, strcpy ...) writes into your memory ----
+def ours(frame):
+    try:
+        s = frame.find_sal()
+        return bool(s.symtab) and s.symtab.filename == our_file
+    except gdb.error: return False
+
+class Watch(gdb.Breakpoint):
+    """a hardware watchpoint on one 8-byte word: the CPU stops the program the moment something writes it"""
+    def __init__(self, addr, call):
+        super().__init__("*(long *) %d" % addr, gdb.BP_WATCHPOINT, gdb.WP_WRITE, internal=True)
+        self.addr, self.call, self.old = addr, call, raw(addr, 8)
+    def stop(self):
+        try:
+            new, f = raw(self.addr, 8), gdb.newest_frame()
+            if new != self.old and not ours(f):                  # only writes made inside the library
+                self.call["writes"].append({"addr": self.addr, "size": 8, "old": self.old, "new": new, "in": f.name()})
+            self.old = new
+        except Exception: pass
+        return False
+
+def disarm():
+    """delete every watchpoint, even one the CPU refused half-way"""
+    del WPS[:]
+    for b in gdb.breakpoints():
+        try:
+            if b.type in (gdb.BP_WATCHPOINT, gdb.BP_HARDWARE_WATCHPOINT): b.delete()
+        except (gdb.error, RuntimeError): pass
+
+def reg(r): return int(gdb.parse_and_eval("(unsigned long) $" + r))
+def chunk_size(p):
+    """the size malloc wrote in the header just above the block at p"""
+    b = raw(p - 8, 8)
+    return int.from_bytes(bytes.fromhex(b), "little") & ~7 if b else 0
+
+def user_mem(p):
+    """[start, end) of your variable or heap block that p points into, or None"""
+    if not steps or p < 4096: return None
+    s = steps[-1]
+    for n in s["heap"]:
+        if not n["freed"] and n["addr"] <= p < n["addr"] + n["size"]: return n["addr"], n["addr"] + n["size"]
+    for fr in s["frames"]:
+        for v in fr["vars"]:
+            if v["addr"] and v["addr"] <= p < v["addr"] + v["size"]: return v["addr"], v["addr"] + v["size"]
+    return None
+
+def plan(func):
+    """which 8-byte words this call is likely to write, most likely first"""
+    a = [reg(r) for r in ("rdi", "rsi", "rdx", "rcx")]
+    if func == "free":                                    # the block's first 2 words, and the next chunk's header
+        if not a[0]: return []
+        nxt = a[0] - 16 + chunk_size(a[0])
+        return [a[0], a[0] + 8, nxt, nxt + 8]
+    if func in ("malloc", "calloc", "realloc"):          # malloc hands back the newest freed block of the right size
+        n = {"malloc": a[0], "calloc": a[0] * a[1], "realloc": a[1]}[func]
+        want, seen, out = max(32, (n + 8 + 15) & ~15), set(), []
+        if func == "realloc" and a[0]: out += [a[0], a[0] + 8]
+        for p in reversed(FREE_ORDER):
+            if p in FREED and p not in seen and chunk_size(p) == want: seen.add(p); out += [p, p + 8]
+        return out
+    out = []                                              # anything else: the memory its pointer arguments point into
+    for p in a:
+        m = user_mem(p)
+        if m: out += list(range(p - p % 8, min(m[1], p + 8 * WATCH_MAX), 8))
+    return out
+
+ALLOCS = ("malloc", "calloc", "realloc", "free")
+
+def arm(func, line):
+    global watch_ok
+    disarm()
+    call = {"func": func, "line": line, "arg": reg("rdi"), "watched": [], "writes": []}
+    for w in plan(func):
+        if len(WPS) >= WATCH_MAX or not watch_ok: break
+        if w in call["watched"] or not raw(w, 8): continue
+        try: WPS.append(Watch(w, call)); call["watched"].append(w)
+        except (gdb.error, RuntimeError):                 # the CPU has no room: go on without watchpoints
+            watch_ok = False; disarm(); del call["watched"][:]
+    if call["watched"]: LIBCALLS.append(call)
+
+class LibCall(gdb.Breakpoint):
+    """sits on a `call free@plt` in your code, and arms watchpoints just before the library runs"""
+    def __init__(self, pc, func, line):
+        super().__init__("*%d" % pc, internal=True)
+        self.func, self.line = func, line
+    def stop(self):
+        try: arm(self.func, self.line)
+        except Exception: pass
+        return False
+
+def lib_calls():
+    """every call from your code into a library, as (address, function, line)"""
+    blk = gdb.selected_frame().find_sal().symtab.static_block()
+    for ins in gdb.selected_frame().architecture().disassemble(blk.start, blk.end - 1):
+        m = re.search(r"\bcall\b.*<([\w.]+)@plt>", ins["asm"])
+        if m: yield ins["addr"], re.sub(r"^__isoc99_", "", m.group(1)), gdb.find_pc_line(ins["addr"]).line
 
 def read_block(addr, stname):
     t = gdb.lookup_type(stname)
@@ -178,9 +281,7 @@ def chunks_now():
     return out
 
 def in_our_file():
-    try:
-        s = gdb.selected_frame().find_sal()
-        return s.symtab and s.symtab.filename == our_file
+    try: return ours(gdb.selected_frame())
     except gdb.error: return False
 
 def console():
@@ -208,7 +309,23 @@ def snapshot():
     if steps and len(frames) < len(steps[-1]["frames"]):           # a function just returned
         ret = returned(steps[-1]["frames"][0]["func"])
     steps.append({"line": sal.line, "func": frame.name(), "frames": frames,
-                  "heap": heap_now(), "chunks": chunks, "ret": ret, "out": console()})
+                  "heap": heap_now(), "chunks": chunks, "ret": ret, "out": console(),
+                  "lib": [c for c in LIBCALLS if c["writes"] or c["func"] in ALLOCS]})   # what the watchpoints caught
+    del LIBCALLS[:]
+
+class NoWatch(Exception): pass
+def run(cmd):
+    try: t = gdb.execute(cmd, to_string=True)
+    except gdb.error as e:
+        if "Could not insert hardware" in str(e): raise NoWatch()
+        raise
+    if "Could not insert hardware" in t: raise NoWatch()    # gdb stopped half-way through the line
+
+def advance():
+    """run one line of your code; library code runs to the end without stopping"""
+    run("step")
+    while not in_our_file():
+        run("finish")
 
 gdb.execute("set pagination off"); gdb.execute("set confirm off")
 gdb.execute("break " + START)
@@ -222,16 +339,22 @@ for fn in ("malloc", "calloc", "realloc"):
     try: Malloc(fn)
     except (gdb.error, RuntimeError): pass
 Free()
+for pc, fn, line in lib_calls():
+    try: LibCall(pc, fn, line)
+    except (gdb.error, RuntimeError): pass
 
 for _ in range(MAX_STEPS):
     try:
         snapshot()
-        gdb.execute("step", to_string=True)
-        while not in_our_file():
-            gdb.execute("finish", to_string=True)
+        try: advance()
+        except NoWatch:                                     # this CPU can't: finish the line without watchpoints
+            disarm(); watch_ok = False; del LIBCALLS[:]
+            advance()
     except gdb.error:
         break
+    finally:
+        disarm()
 
 out = os.path.splitext(os.path.basename(gdb.current_progspace().filename))[0] + ".json"
-with open(out, "w") as fh: json.dump({"file": our_file, "allocs_tracked": True, "steps": steps}, fh)
+with open(out, "w") as fh: json.dump({"file": our_file, "allocs_tracked": True, "watchpoints": watch_ok, "steps": steps}, fh)
 print("wrote %s with %d steps" % (out, len(steps)))

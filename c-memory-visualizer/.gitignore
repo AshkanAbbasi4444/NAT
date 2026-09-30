@@ -1,3 +1,4 @@
 # built by: gcc -g -O0 prog.c -o prog
 remove_linked_list_2
 prog_stdout.txt
+*.json
