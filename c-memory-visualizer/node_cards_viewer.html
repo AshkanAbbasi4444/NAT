@@ -135,6 +135,9 @@ pre{margin:0;height:calc(100vh - var(--barh,52px));overflow:auto;background:#FBF
 .ladder .lh{font:11.5px system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--muted);margin-top:4px}
 .ladder .lx{position:absolute;right:10px;top:2px;cursor:pointer;color:var(--muted);font:18px system-ui,sans-serif}
 #pic [data-lad]{cursor:pointer}
+#pic svg .hov{opacity:0;transition:opacity .12s}
+#pic svg g:hover>.hov{opacity:1}
+@media (hover:none){#pic svg .hov{opacity:1}}
 .fh .sig{display:block;font-weight:400;color:var(--muted);font-size:10.5px}
 .hopin{animation:hopin .35s both}
 @keyframes hopin{from{opacity:0}to{opacity:1}}
@@ -1129,11 +1132,13 @@ function wordsHTML(){
 /* ---------- node cards view ---------- */
 function renderCards(s){
   const TT=touched(at), CH=TT.ch, R=reachable(s), inner=s.frames[0], RC=reach(s), CI=callInfo(s), RET=retInfo(s);
-  const LL=listLines(s), SLOTW=184, SLOTH=86, HY=276+18*LL.length, CW=218, STEP=236, FH=36, DIM=' opacity="0.22"';
+  const LL=listLines(s), SLOTW=184, SLOTH=86, CW=218, STEP=236, FH=36, DIM=' opacity="0.22"';
   const HOPC=["#BFDBFE","#93C5FD","#3B82F6","#1D4ED8"], hopc=d=>HOPC[Math.min(d,3)];          /* own, 1, 2, 3+ hops away */
   const EX=e=>` data-ex="${esc(e)}"`;                                                        /* hover it: its hops light up */
   const isNew=f=>at>0&&f===inner&&TRACE.steps[at-1].frames.length<s.frames.length;
-  let o="", arrows="", labels="", pos={}, fpos={}, x=16, y=34;
+  let o="", arrows="", labels="", pos={}, fpos={}, x=16, y=34, xmax=0;
+  const pw=Math.max(320,($("pic").clientWidth||1000)-20), zf=PZ==="fit"?null:+PZ/100;     /* the width you can see, in picture units */
+  const vis=zf?pw/zf:pw/Math.max(0.8,Math.min(1,pw/980)), FROW=SLOTH+34+62;                /* frames and cards wrap at this width */
   o+=`<text x="16" y="21" font-size="15" font-weight="600" fill="${INK}">Stack<tspan dx="10" font-size="11.5" font-weight="400" fill="${MUT}">faded = not touched by this line</tspan></text>`;
   [...s.frames].reverse().forEach(f=>{                           /* address order: main's frame on the left */
     const vars=[...f.vars].sort((a,b)=>(b.addr||0)-(a.addr||0));
@@ -1149,12 +1154,13 @@ function renderCards(s){
       slots.sort((x,y)=>y.addr-x.addr);
     }
     const w=28+slots.reduce((t,s)=>t+s.w+8,0)-8, SP=FRAMEINT&&f.rbp&&f.rsp?f:null, spMarks=[];
-    fpos[f.func]={x,w};
+    if(x>16&&x+w>vis-16){ x=16; y+=FROW; }                        /* no room left in this row: start a new one */
+    fpos[f.func]={x,w,y};
     const [fc,ft]=fcol(f.func);
     o+=`<rect x="${x}" y="${y}" width="${w}" height="${SLOTH+34}" rx="10" fill="${ft}" stroke="${isNew(f)?AMB:LN}" stroke-width="${isNew(f)?1.6:1}"/>`+
        `<rect x="${x}" y="${y}" width="5" height="${SLOTH+34}" rx="2.5" fill="${fc}"/>`+                /* the function's colour */
        `<text x="${x+16}" y="${y+18}" font-size="12.5" font-weight="600" fill="${fc}">${esc(f.func)}'s frame`+
-       (()=>{ const room=Math.floor((w-24-(f.func.length+8)*7)/5.7), sg=f.sig||"";           /* the function's signature, if it fits */
+       (()=>{ const room=Math.floor((w-24-(f.func.length+8)*7)/6.4), sg=f.sig||"";           /* the function's signature, if it fits */
          return sg&&room>12?`<tspan dx="10" font-size="10.5" font-weight="400" fill="${MUT}" ${MONO}>${esc(sg.length>room?sg.slice(0,room-1)+"…":sg)}</tspan>`:""; })()+`</text>`;
     let sx=x+14;
     slots.forEach(sl=>{
@@ -1168,7 +1174,7 @@ function renderCards(s){
           `<rect x="${bx}" y="${by}" width="${sl.w}" height="${SLOTH}" rx="8" fill="#EBEEF1" stroke="none"/>`+
           `<text x="${bx+9}" y="${by+17}" font-size="11" font-weight="600" fill="${MUT}">${e.sys}</text>`+
           (val?`<text x="${bx+9}" y="${by+40}" font-size="${val.length>10?10:12}" font-weight="700" fill="${MUT}" ${MONO}>${esc(val)}</text>`:"")+
-          `<text x="${bx+9}" y="${by+58}" font-size="10" fill="${FAINT}" ${MONO}>at ${show(e.addr)}</text></g>`;
+          `<text class="hov" x="${bx+9}" y="${by+58}" font-size="10" fill="${FAINT}" ${MONO}>at ${show(e.addr)}</text></g>`;
         return;
       }
       const v=sl.v, SLOTW2=sl.w, key="v:"+v.addr, C=CH.has(key), I=!C&&TT.inv.has(key), F=TT.on&&!C&&!I, rc=RC[key], ci=CI[key], hd=RC._D?RC._D[key]:undefined, out=hd===undefined&&!!inner;
@@ -1182,12 +1188,12 @@ function renderCards(s){
         (v.name.length>7?"":`<text x="${bx+SLOTW2-8}" y="${by+17}" font-size="10" text-anchor="end" fill="${MUT}">${esc(v.type)}</text>`)+
         `<text x="${bx+11}" y="${by+40}" font-size="${val.length>10?12:15}" font-weight="800" fill="${C?AMB:INK}" ${MONO}>${C?`<tspan class="pop">${esc(val)}</tspan>`:esc(val)}</text>`+
         (rc?`<text x="${bx+SLOTW2-8}" y="${by+40}" font-size="11" font-weight="700" text-anchor="end" fill="${REACH}" ${MONO}${EX(rc.v)}>= ${esc(orText(rc.v,rc.alt.map(o=>o.v),12))}</text>`:"")+
-        `<text x="${bx+11}" y="${by+58}" font-size="10" fill="${MUT}" ${MONO}>at ${show(v.addr)}</text>`+
-        (rc?`<text x="${bx+SLOTW2-8}" y="${by+58}" font-size="10" font-weight="700" text-anchor="end" fill="${REACH}" ${MONO}${EX(rc.a)}>= ${esc(orText(rc.a,rc.alt.map(o=>o.a),13))}</text>`:"")+
+        `<text class="hov" x="${bx+11}" y="${by+58}" font-size="10" fill="${MUT}" ${MONO}>at ${show(v.addr)}</text>`+
+        (rc?`<text class="hov" x="${bx+SLOTW2-8}" y="${by+58}" font-size="10" font-weight="700" text-anchor="end" fill="${REACH}" ${MONO}${EX(rc.a)}>= ${esc(orText(rc.a,rc.alt.map(o=>o.a),11))}</text>`:"")+
         (ci?`<text x="${bx+11}" y="${by+76}" font-size="10" font-weight="700" fill="${AMB}" ${MONO}>${esc(ci.text)}</text>`                     /* the call: where this came from */
            :out?`<text x="${bx+11}" y="${by+76}" font-size="10" font-style="italic" fill="${MUT}">not reachable from here</text>`
-           :(rc?`<text x="${bx+11}" y="${by+76}" font-size="10" fill="${MUT}" ${MONO}${EX(rc.v)}>change: <tspan fill="${REACH}" font-weight="700">${esc(rc.v)} = …;</tspan></text>`:"")+
-            (v.decl?`<text x="${bx+SLOTW2-8}" y="${by+76}" font-size="10" text-anchor="end" fill="${MUT}" ${MONO}>line ${v.decl}</text>`:""))+`</g>`;
+           :(rc?`<text class="hov" x="${bx+11}" y="${by+76}" font-size="10" fill="${MUT}" ${MONO}${EX(rc.v)}>change: <tspan fill="${REACH}" font-weight="700">${esc(rc.v)} = …;</tspan></text>`:"")+
+            (v.decl?`<text class="hov" x="${bx+SLOTW2-8}" y="${by+76}" font-size="10" text-anchor="end" fill="${MUT}" ${MONO}>line ${v.decl}</text>`:""))+`</g>`;
     });
     if(SP){                                                        /* pills under the slots, and a bracket under the red zone */
       spMarks.forEach(k=>k.m.forEach(t=>{ const pw=t.length*6.4+12;
@@ -1198,8 +1204,9 @@ function renderCards(s){
         o+=`<g data-tip="the red zone: below rsp. A function that calls nothing may keep its locals here without moving rsp"><path d="M${x0},${yb-3} V${yb} H${x1} V${yb-3}" fill="none" stroke="${FAINT}" stroke-width="1.2" stroke-dasharray="3 3"/>`+
           `<rect x="${x1-104}" y="${yb-2}" width="98" height="13" rx="6.5" fill="#fff" stroke="${FAINT}" stroke-dasharray="3 2"/><text x="${x1-55}" y="${yb+8}" font-size="10" font-weight="600" text-anchor="middle" fill="${MUT}">red zone: below rsp</text></g>`; }   /* at the right end, clear of pointer arrows */
     }
-    x+=w+14;
+    x+=w+14; xmax=Math.max(xmax,x);
   });
+  const HY=y-34+276+18*LL.length;                                  /* the heap starts under the last row of frames */
   /* heap cards, in address order */
   const own=new Set(s.heap.map(n=>n.addr));
   const hid=FOLD?s.heap.filter(n=>n.freed||!R.has(n.addr)):[], hset=new Set(hid.map(n=>n.addr));
@@ -1207,8 +1214,10 @@ function renderCards(s){
   const items=[...ordered.map(n=>({n,a:n.addr})),...(s.chunks||[]).filter(c=>!own.has(c.addr)).map(c=>({c,a:c.addr}))];
   if(!LORDER) items.sort((p,q)=>p.a-q.a);
   if(hid.length) items.push({hid});
-  const W=Math.max(980, x+2, 60+items.length*STEP);
   const nf=Math.max(1,...s.heap.map(n=>(n.fields||[]).length)), CARDH=46+nf*FH;
+  const PER=Math.max(1,Math.floor((vis-32+STEP-CW)/STEP)), ROWH=CARDH+120, NROW=Math.max(1,Math.ceil(items.length/PER));   /* cards per row */
+  const W=Math.max(zf?980:vis, xmax+2, 32+Math.min(items.length,PER)*STEP-(STEP-CW));
+  const RY=k=>HY+Math.floor(k/PER)*ROWH, cy={};                                              /* each row's top */
   const sizes=[...new Set(s.heap.map(n=>n.size).filter(Boolean))];
   LL.forEach((l,k)=>{ o+=`<text x="16" y="${HY-30-18*(LL.length-k)}" font-size="12" fill="${l.bad?BAD:INK}" ${MONO} paint-order="stroke" stroke="#fff" stroke-width="4"><tspan font-weight="700">${esc(l.names)}:</tspan> ${esc(l.text)} ${l.count?`<tspan fill="${MUT}">(${l.count} node${l.count===1?"":"s"})</tspan>`:""}</text>`; });   /* list lines */
   const heapNote=`${sizes.length===1?sizes[0]+"-byte blocks":"blocks"}, ${LORDER?"in list order":"in address order (list order is set by next)"}`;
@@ -1217,11 +1226,11 @@ function renderCards(s){
     o+=`<text x="300" y="21" font-size="11.5" font-weight="700" fill="${REACH}">Blue shows how ${esc(inner.func)} gets there. Hover it to follow it.</text>`;   /* next to the title, so it's always in view */
     const lx=16+46+Math.round(heapNote.length*6.3)+40;                                           /* hop colour legend, right after the heap title */
     o+=`<text x="${lx}" y="${HY-30}" font-size="10.5" fill="${MUT}">Hops away</text>`+
-       ["own","1","2","3+"].map((t,i)=>`<rect x="${lx+64+i*36}" y="${HY-39}" width="9" height="11" rx="2" fill="${HOPC[i]}"/><text x="${lx+76+i*36}" y="${HY-30}" font-size="10.5" fill="${MUT}">${t}</text>`).join("");
+       ["own","1","2","3+"].map((t,i)=>`<rect x="${lx+74+i*44}" y="${HY-39}" width="9" height="11" rx="2" fill="${HOPC[i]}"/><text x="${lx+86+i*44}" y="${HY-30}" font-size="10.5" fill="${MUT}">${t}</text>`).join("");
   }
-  const cx={};
+  const cx={}, byAddr={}; s.heap.forEach(b=>byAddr[b.addr]=b);
   items.forEach((it,k)=>{
-    const bx=16+k*STEP;
+    const bx=16+(k%PER)*STEP, HY=RY(k);
     if(it.hid){                                                   /* folded away */
       const fr=it.hid.filter(n=>n.freed).length, lk=it.hid.length-fr, my=HY+CARDH/2;
       o+=`<g data-tip="switch off &quot;hide freed&quot; to see them"><rect x="${bx}" y="${HY}" width="${CW}" height="${CARDH}" rx="10" fill="${PNL}" stroke="${LN}" stroke-width="1.2" stroke-dasharray="5 4"/>`+
@@ -1240,13 +1249,13 @@ function renderCards(s){
       return;
     }
     const n=it.n, freed=!!n.freed, lost=!freed&&!R.has(n.addr), rb=RC["b:"+n.addr], hd=RC._D?RC._D["b:"+n.addr]:undefined, out=hd===undefined&&!freed&&!lost&&!!inner;
-    const C=freed?CH.has("h:"+n.addr+":freed"):n.fields.some(f=>CH.has("h:"+n.addr+":"+f.name)), I=!C&&TT.inv.has("b:"+n.addr), F=TT.on&&!C&&!I;
-    cx[n.addr]=bx;
+    const C=freed?CH.has("h:"+n.addr+":freed"):n.fields.some(f=>CH.has("h:"+n.addr+":"+f.name)), I=!C&&TT.inv.has("b:"+n.addr), F=TT.on&&!C&&!I&&!lost;   /* a leak always stays visible */
+    cx[n.addr]=bx; cy[n.addr]=HY;
     const cStroke=C?AMB:freed?DEAD:lost?BAD:I?INK:BORDER, band=freed?"#EDF1F5":lost?"#FBE9E9":C?"#FCEBC2":"#EEF2F7", at=show(n.addr), tw=at.length*7.4+18;
     o+=`<g data-box="b:${n.addr}" data-tip="${esc("real address "+real(n.addr)+"\n"+n.type+reachTip(rb,inner?inner.func:"")+(out?`\n${inner.func} can't reach this block`:"")+libTip(s,n.addr,n.size||16))}"${F?DIM:""}>`+
       (freed||lost?"":`<rect x="${bx+4}" y="${HY+4}" width="${CW}" height="${CARDH}" rx="10" fill="#DCE4EE"/>`)+                        /* a card lying on the paper */
-      `<path d="M${bx+8},${HY+2} V${HY-11} Q${bx+8},${HY-17} ${bx+14},${HY-17} H${bx+8+tw-6} Q${bx+8+tw},${HY-17} ${bx+8+tw},${HY-11} V${HY+2} Z" fill="${band}" stroke="${cStroke}" stroke-width="${C||I?2:1}" ${(lost||freed)?'stroke-dasharray="4 3"':""}/>`+
-      `<rect x="${bx}" y="${HY}" width="${CW}" height="${CARDH}" rx="10" fill="${freed?PNL:lost?"#FEF6F6":out?"#F3F5F8":"#fff"}" stroke="${cStroke}" stroke-width="${C||I?2.2:1}" ${(lost||freed)?'stroke-dasharray="5 4"':""}/>`+
+      `<path d="M${bx+8},${HY+2} V${HY-11} Q${bx+8},${HY-17} ${bx+14},${HY-17} H${bx+8+tw-6} Q${bx+8+tw},${HY-17} ${bx+8+tw},${HY-11} V${HY+2} Z" fill="${band}" stroke="${cStroke}" stroke-width="${C||I||lost?2:1}" ${freed?'stroke-dasharray="4 3"':""}/>`+
+      `<rect x="${bx}" y="${HY}" width="${CW}" height="${CARDH}" rx="10" fill="${freed?PNL:lost?"#FEF2F2":out?"#F3F5F8":"#fff"}" stroke="${cStroke}" stroke-width="${C||I||lost?2.2:1}" ${freed?'stroke-dasharray="5 4"':lost?'stroke-dasharray="7 3"':""}/>`+
       `<path d="M${bx+1},${HY+42} V${HY+10} Q${bx+1},${HY+1} ${bx+10},${HY+1} H${bx+CW-10} Q${bx+CW-1},${HY+1} ${bx+CW-1},${HY+10} V${HY+42} Z" fill="${band}"/>`+
       `<text x="${bx+8+tw/2}" y="${HY-4}" font-size="11" font-weight="700" text-anchor="middle" fill="${freed?MUT:INK}" ${MONO}>${at}</text>`+
       (hd!==undefined?`<rect x="${bx+2}" y="${HY+7}" width="4" height="${CARDH-14}" rx="2" fill="${hopc(hd)}"/>`:"")+
@@ -1255,21 +1264,36 @@ function renderCards(s){
          :out?`<text x="${bx+11}" y="${HY+34}" font-size="10" font-style="italic" fill="${MUT}">not reachable from here</text>`:"")+
       `<text x="${bx+CW-10}" y="${HY+17}" font-size="10" text-anchor="end" fill="${MUT}" ${MONO}>${esc(short(n.type))}</text>`+
       `<line x1="${bx}" y1="${HY+42}" x2="${bx+CW}" y2="${HY+42}" stroke="${LN}"/>`;
-    if(freed) o+=`<text x="${bx+CW/2}" y="${HY+42+26}" font-size="12.5" font-weight="700" text-anchor="middle" fill="${MUT}">freed</text><text x="${bx+CW/2}" y="${HY+42+44}" font-size="10" text-anchor="middle" fill="${MUT}">back with the allocator</text>`;
+    if(freed){                                                    /* what free() wrote into it, word by word */
+      const B=hx(n.bytes), LB=libBytes(s), words=(n.alloc||[0,1]).filter(w=>w*8+8<=B.length).slice(0,nf);
+      o+=`<text x="${bx+11}" y="${HY+34}" font-size="11.5" font-weight="700" fill="${MUT}">freed · back with the allocator</text>`;
+      if(!words.length) o+=`<text x="${bx+CW/2}" y="${HY+42+26}" font-size="12.5" font-weight="700" text-anchor="middle" fill="${MUT}">freed</text>`;
+      words.forEach((w,j)=>{
+        const fy=HY+42+j*FH, word=B.slice(w*8,w*8+8), now=[0,1,2,3,4,5,6,7].some(c=>LB.has(n.addr+w*8+c));
+        const [nx]=w===0?tcacheNext(n,word,byAddr):[null];
+        const name=w===0?"next free block":w===1?"double-free key":"allocator's", val=w===0?(nx===0?"NULL":nx===null?"scrambled":show(nx)):w===1?"random":"0x"+le(word).toString(16);
+        const old=(n.fields||[]).filter(f=>f.offset!=null&&f.offset<w*8+8&&f.offset+f.size>w*8).map(f=>f.name).join(", ");
+        o+=`<g data-tip="${esc(`free() wrote bytes +${w*8}…+${w*8+7}: ${w===0?"a link to the next free block of this size (glibc scrambles it: next XOR address>>12)":w===1?"a random key; free() checks it to catch a double free":"allocator data"}${old?`\nit overwrote ${old}`:""}\nbytes ${word.join(" ")}`)}">`+
+          `<rect x="${bx+3}" y="${fy+3}" width="${CW-6}" height="${FH-6}" rx="4" fill="${now?AMBG:"transparent"}"/>`+
+          `<text x="${bx+11}" y="${fy+17}" font-size="11.5" fill="${MUT}" ${MONO}>${name}</text>`+
+          `<text x="${bx+CW-10}" y="${fy+17}" font-size="13" font-weight="800" text-anchor="end" fill="${now?AMB:MUT}" ${MONO}>${esc(val)}</text>`+
+          `<text class="hov" x="${bx+11}" y="${fy+30}" font-size="10" fill="${FAINT}" ${MONO}>at +${w*8}${old?` · was ${esc(old)}`:""}</text></g>`;
+      });
+    }
     (freed?[]:n.fields).forEach((fd,j)=>{
       const fy=HY+42+j*FH, key="h:"+n.addr+":"+fd.name, Cf=CH.has(key), rf=RC[key];
       const txt=fd.kind==="ptr"?show(fd.value):fd.kind==="other"?(arrText(fd.type,fd.size,fieldHex(n,fd),14)||"—"):(fd.value===null?"—":String(fd.value));
       const fa=fd.offset!=null?n.addr+fd.offset:null, faTxt=fa===null?"":simple?show(fa):"…"+fa.toString(16).slice(-4);   /* this field's own address */
       o+=`<g data-box="${key}" data-tip="${esc(fd.name+" ("+fd.type+")"+(fa===null?"":"\nat "+real(fa)+(simple?" ("+show(fa)+")":"")+", the block's start + "+fd.offset)+reachTip(rf,inner?inner.func:""))}">`+
-         `<rect x="${bx+3}" y="${fy+3}" width="${CW-6}" height="${FH-6}" rx="4" fill="${Cf?AMBG:"none"}"/>`+
+         `<rect x="${bx+3}" y="${fy+3}" width="${CW-6}" height="${FH-6}" rx="4" fill="${Cf?AMBG:"transparent"}"/>`+
          `<text x="${bx+11}" y="${fy+17}" font-size="10.5" font-weight="${rf?700:400}" fill="${rf?REACH:MUT}" ${MONO}${rf?EX(rf.v):""}>${esc(rf?orText(rf.v,rf.alt.map(o=>o.v),16):fd.name)}</text>`+
          `<text x="${bx+CW-10}" y="${fy+17}" font-size="${txt.length>7?12:14}" font-weight="800" text-anchor="end" fill="${Cf?AMB:INK}" ${MONO}>${Cf?`<tspan class="pop">${esc(txt)}</tspan>`:esc(txt)}</text>`+
-         (rf?`<text x="${bx+11}" y="${fy+30}" font-size="10" fill="${MUT}" ${MONO}${EX(rf.v)}>change: <tspan fill="${REACH}">${esc(rf.v)} = …;</tspan></text>`:"")+
-         (faTxt&&(!rf||rf.v.length<=17)?`<text x="${bx+CW-10}" y="${fy+30}" font-size="10" text-anchor="end" fill="${FAINT}" ${MONO}>at ${faTxt}</text>`:"")+`</g>`;
+         (rf?`<text class="hov" x="${bx+11}" y="${fy+30}" font-size="10" fill="${MUT}" ${MONO}${EX(rf.v)}>change: <tspan fill="${REACH}">${esc(rf.v)} = …;</tspan></text>`:"")+
+         (faTxt&&(!rf||rf.v.length<=14)?`<text class="hov" x="${bx+CW-10}" y="${fy+30}" font-size="10" text-anchor="end" fill="${FAINT}" ${MONO}>at ${faTxt}</text>`:"")+`</g>`;
     });
     const lw=libIn(s,n.addr,n.size||16);                          /* a library call wrote into it on this line */
-    o+=(lost?`<text x="${bx+CW/2}" y="${HY+CARDH+14}" font-size="10" font-weight="700" text-anchor="middle" fill="${BAD}">unreachable — leaked</text>`:"")+
-      (lw?`<text x="${bx+CW/2}" y="${HY+CARDH+(lost?28:14)}" font-size="10" font-weight="700" text-anchor="middle" fill="${INK}" data-tip="${esc(`a gdb watchpoint caught ${lw.func}() writing ${lw.n} byte${lw.n===1?"":"s"} into this block, inside the library`)}">${esc(lw.func)}() wrote ${lw.n} byte${lw.n===1?"":"s"} here</text>`:"")+`</g>`;
+    o+=(lost?`<text x="${bx+CW/2}" y="${HY+CARDH+17}" font-size="12.5" font-weight="700" text-anchor="middle" fill="${BAD}">leaked: nothing points here</text>`:"")+
+      (lw?`<text x="${bx+CW/2}" y="${HY+CARDH+(lost?33:16)}" font-size="10" font-weight="700" text-anchor="middle" fill="${INK}" data-tip="${esc(`a gdb watchpoint caught ${lw.func}() writing ${lw.n} byte${lw.n===1?"":"s"} into this block, inside the library`)}">${esc(lw.func)}() wrote ${lw.n} byte${lw.n===1?"":"s"} here</text>`:"")+`</g>`;
   });
   const label=(tx,x0,y0,col)=>{ const hw=tx.length*3.3+5, lx=Math.max(16+hw,Math.min(W-16-hw,x0));
     return `<rect x="${lx-hw}" y="${y0-12}" width="${2*hw}" height="16" rx="5" fill="#fff" opacity="0.94"/>`+
@@ -1279,17 +1303,19 @@ function renderCards(s){
     const w=r.v.length*6.2+6, lx=anchor==="end"?x0-w:x0;
     return `<g${F?DIM:""}><rect x="${lx}" y="${y0-11}" width="${w}" height="14" rx="3" fill="#fff" opacity="0.9"/>`+
       `<text x="${anchor==="end"?x0-3:x0+3}" y="${y0}" font-size="10" font-weight="700" text-anchor="${anchor}" fill="${REACH}" ${MONO}${EX(r.v)}>${esc(r.v)}</text></g>`; };
-  let low=HY+CARDH+90, lastLy=-1e9, ghosts="";
+  let low=HY+(NROW-1)*ROWH+CARDH+90, lastLy=-1e9, ghosts="";
+  const link=(x1,a,x2,b,d)=>cy[a]===cy[b]?`M${x1},${cy[a]+CARDH} C${x1},${cy[a]+CARDH+d} ${x2},${cy[b]+CARDH+d} ${x2},${cy[b]+CARDH+3}`   /* same row: curve under */
+    :`M${x1},${cy[a]+CARDH} C${x1},${cy[a]+CARDH+50} ${x2+58},${cy[b]-60} ${x2+58},${cy[b]-2}`;                                        /* another row: land on its top */
   /* next links, curving under the cards */
   s.heap.forEach(n=>{
     (n.fields||[]).forEach((fd,j)=>{
       if(n.freed||fd.kind!=="ptr"||!fd.value||cx[n.addr]===undefined||cx[fd.value]===undefined) return;   /* the card may be folded away */
       const key="h:"+n.addr+":"+fd.name, C=CH.has(key), I=!C&&TT.inv.has(key), F=TT.on&&!C&&!I, col=C?AMB:I?INK:MUT;
-      const x1=cx[n.addr]+CW-20, x2=cx[fd.value]+20, by=HY+CARDH;
+      const x1=cx[n.addr]+CW-20, x2=cx[fd.value]+20, by=cy[n.addr]+CARDH;
       const d=20+Math.abs(cx[fd.value]-cx[n.addr])/STEP*12+j*10;
-      arrows+=`<path data-arrow="${key}" d="M${x1},${by} C${x1},${by+d} ${x2},${by+d} ${x2},${by+3}" fill="none" ${C?'pathLength="1" class="draw"':""} stroke="${col}" stroke-width="${C||I?2.4:1.5}" stroke-linecap="round" marker-end="url(#m${C?"a":I?"k":"g"})"${F?DIM:""}/>`+
+      arrows+=`<path data-arrow="${key}" d="${link(x1,n.addr,x2,fd.value,d)}" fill="none" ${C?'pathLength="1" class="draw"':""} stroke="${col}" stroke-width="${C||I?2.4:1.5}" stroke-linecap="round" marker-end="url(#m${C?"a":I?"k":"g"})"${F?DIM:""}/>`+
         `<circle cx="${x1}" cy="${by}" r="3.4" fill="${col}"${F?DIM:""}/>`;
-      labels+=star("b:"+fd.value,x2+6,by+17,"start",F);
+      labels+=cy[n.addr]===cy[fd.value]?star("b:"+fd.value,x2+6,by+17,"start",F):star("b:"+fd.value,x2+64,cy[fd.value]-4,"start",F);
       if(C||I){ const ly=Math.max(by+Math.max(d*0.75+16,30),lastLy+18); lastLy=ly; low=Math.max(low,ly+14);
         labels+=typeTag(fd.type,x1+5,by+12,col,false)+label(`${fd.name} ${C?"now points to":"is how we reach"} ${show(fd.value)}`,(x1+x2)/2,ly,col); }
     });
@@ -1299,16 +1325,16 @@ function renderCards(s){
     s.heap.forEach(n=>{ const o=pb[n.addr]; if(n.freed||!o||o.freed||cx[n.addr]===undefined) return;
       (n.fields||[]).forEach((fd,j)=>{ const of=fd.kind==="ptr"&&(o.fields||[]).find(f=>f.name===fd.name), ov=of&&of.value;
         if(!ov||ov===fd.value||cx[ov]===undefined) return;
-        const x1=cx[n.addr]+CW-20, x2=cx[ov]+20, by=HY+CARDH, d=30+Math.abs(cx[ov]-cx[n.addr])/STEP*12+j*10, ly=Math.max(by+Math.max(d*0.75+16,30),lastLy+18); lastLy=ly;
+        const x1=cx[n.addr]+CW-20, x2=cx[ov]+20, by=cy[n.addr]+CARDH, d=30+Math.abs(cx[ov]-cx[n.addr])/STEP*12+j*10, ly=Math.max(by+Math.max(d*0.75+16,30),lastLy+18); lastLy=ly;
         low=Math.max(low,ly+14);
-        ghosts+=`<path d="M${x1},${by} C${x1},${by+d} ${x2},${by+d} ${x2},${by+3}" fill="none" stroke="${DEAD}" stroke-width="1.8" stroke-dasharray="3 4"/>`;
+        ghosts+=`<path d="${link(x1,n.addr,x2,ov,d)}" fill="none" stroke="${DEAD}" stroke-width="1.8" stroke-dasharray="3 4"/>`;
         labels+=label(`cut: ${fd.name} was ${show(ov)}`,(x1+x2)/2,ly,MUT); }); });
     P.frames.forEach(f=>f.vars.forEach(v=>pv[v.addr+"|"+f.func+"|"+v.name]=v));
     s.frames.forEach(f=>f.vars.forEach(v=>{ const o=pv[v.addr+"|"+f.func+"|"+v.name], sp=pos["v:"+v.addr];
       if(!sp||!v.struct||!o||o.init===false||!o.value||o.value===v.value||cx[o.value]===undefined) return;
-      const t=cx[o.value]+CW/2-40;
-      ghosts+=`<path d="M${sp.x-12},${sp.y} C${sp.x-12},${sp.y+60} ${t},${HY-60} ${t},${HY-2}" fill="none" stroke="${DEAD}" stroke-width="1.8" stroke-dasharray="3 4"/>`+
-        `<text x="${t-4}" y="${HY-6}" font-size="10" text-anchor="end" fill="${MUT}">was</text>`; }));
+      const t=cx[o.value]+CW/2-40, ty=cy[o.value];
+      ghosts+=`<path d="M${sp.x-12},${sp.y} C${sp.x-12},${sp.y+60} ${t},${ty-60} ${t},${ty-2}" fill="none" stroke="${DEAD}" stroke-width="1.8" stroke-dasharray="3 4"/>`+
+        `<text x="${t-4}" y="${ty-6}" font-size="10" text-anchor="end" fill="${MUT}">was</text>`; }));
   }
   /* pointers from the stack: to a node (several land side by side), into a node's field, or to another variable (like pp = &head) */
   const ptrs=[], many={}, seen={}, stackAt={};
@@ -1320,12 +1346,12 @@ function renderCards(s){
     const sp=pos["v:"+v.addr], tgt=s.heap.find(b=>b.addr===v.value), tf=tgt&&tgt.freed;
     const i=(seen[v.value]=(seen[v.value]||0)+1)-1, tabR=cx[v.value]+8+show(v.value).length*7.4+18+12;   /* land right of the address tab */
     const t=Math.max(tabR+i*22, cx[v.value]+CW/2+(i-(many[v.value]-1)/2)*22);
-    const col=tf?BAD:sp.C?AMB:sp.I?INK:MUT, mk=tf?"r":sp.C?"a":sp.I?"k":"g";
-    arrows+=`<path data-arrow="v:${v.addr}" d="M${sp.x},${sp.y} C${sp.x},${sp.y+60} ${t},${HY-60} ${t},${HY-2}" fill="none" ${sp.C&&!tf?'pathLength="1" class="draw"':""} ${tf?'stroke-dasharray="5 4"':""} stroke="${col}" stroke-width="${sp.C||sp.I?2.3:1.5}" stroke-linecap="round" marker-end="url(#m${mk})"${sp.F?DIM:""}/>`+
+    const col=tf?BAD:sp.C?AMB:sp.I?INK:MUT, mk=tf?"r":sp.C?"a":sp.I?"k":"g", ty=cy[v.value];
+    arrows+=`<path data-arrow="v:${v.addr}" d="M${sp.x},${sp.y} C${sp.x},${sp.y+60} ${t},${ty-60} ${t},${ty-2}" fill="none" ${sp.C&&!tf?'pathLength="1" class="draw"':""} ${tf?'stroke-dasharray="5 4"':""} stroke="${col}" stroke-width="${sp.C||sp.I?2.3:1.5}" stroke-linecap="round" marker-end="url(#m${mk})"${sp.F?DIM:""}/>`+
       `<circle cx="${sp.x}" cy="${sp.y}" r="3.6" fill="${col}"${sp.F?DIM:""}/>`+typeTag(v.type,sp.x+6,sp.y+14,col,sp.F);
-    if(i===0) labels+=star("b:"+v.value,t+8,HY-4,"start",sp.F);
+    if(i===0) labels+=star("b:"+v.value,t+8,ty-4,"start",sp.F);
     if(sp.F||!(sp.C||sp.I||tf)) return;                            /* sentences only on the active arrows */
-    const ly=sp.y+30+(li++%3)*18, lx=sp.x+(t-sp.x)*((ly-sp.y)/(HY-sp.y));
+    const ly=sp.y+30+(li++%3)*18, lx=sp.x+(t-sp.x)*((ly-sp.y)/(ty-sp.y));
     labels+=label(tf?`${sp.who} ${sp.C?"now points":"points"} to a freed block`:sp.C?`${sp.who} now points to ${show(v.value)}`:`${sp.who} is how we reach ${show(v.value)}`,lx,ly,col);
   });
   s.frames.forEach(f=>f.vars.forEach(v=>{
@@ -1337,7 +1363,7 @@ function renderCards(s){
       st=star("v:"+tv.addr,tx-6,tp.y+17,"end",sp.F);
     } else { const b=blockOf(v.value), f=b&&(b.fields||[]).find(f=>b.addr+f.offset===v.value);   /* into a node's field */
       if(!f||cx[b.addr]===undefined) return;
-      const j=b.fields.indexOf(f), tx=cx[b.addr], ty=HY+42+j*FH+FH/2; d=`M${sp.x},${sp.y} C${sp.x},${sp.y+70} ${tx-50},${ty} ${tx-2},${ty}`;
+      const j=b.fields.indexOf(f), tx=cx[b.addr], ty=cy[b.addr]+42+j*FH+FH/2; d=`M${sp.x},${sp.y} C${sp.x},${sp.y+70} ${tx-50},${ty} ${tx-2},${ty}`;
       st=star("h:"+b.addr+":"+f.name,tx-6,ty-7,"end",sp.F); }
     arrows+=`<path data-arrow="v:${v.addr}" d="${d}" fill="none" ${sp.C?'pathLength="1" class="draw"':""} stroke="${col}" stroke-width="${sp.C||sp.I?2.3:1.5}" stroke-linecap="round" marker-end="url(#m${mk})"${sp.F?DIM:""}/>`+
       `<circle cx="${sp.x}" cy="${sp.y}" r="3.6" fill="${col}"${sp.F?DIM:""}/>`+typeTag(v.type,sp.x+6,sp.y+14,col,sp.F);
@@ -1351,10 +1377,11 @@ function renderCards(s){
     if(rp){ const ax=rp.x+44;
       arrows+=`<path d="M${ax},${rp.y+30} L${ax},${rp.y+4}" fill="none" stroke="${AMB}" stroke-width="1.8" stroke-dasharray="4 3" marker-end="url(#ma)"/>`;
       labels+=label(`${RET.func} returned ${RET.txt}${RET.stored?`, now in ${RET.recv.name}`:""}`,ax,rp.y+44,AMB); }
-    else if(inner&&fpos[inner.func]) labels+=label(`${RET.func} returned ${RET.txt}, but nothing stores it`,fpos[inner.func].x+150,y+SLOTH+56,BAD);
+    else if(inner&&fpos[inner.func]) labels+=label(`${RET.func} returned ${RET.txt}, but nothing stores it`,fpos[inner.func].x+150,fpos[inner.func].y+SLOTH+56,BAD);
   }
   const mk=(id,c)=>`<marker id="m${id}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,1L10,5L0,9L2.5,5z" fill="${c}"/></marker>`;
-  return `<svg viewBox="0 0 ${W} ${low}" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans',system-ui,sans-serif"><defs>${mk("a",AMB)}${mk("g",MUT)}${mk("k",INK)}${mk("r",BAD)}</defs>${o}${ghosts}${arrows}${labels}</svg>`;
+  const big=t=>t.replace(/font-size="(\d+(?:\.\d+)?)"/g,(m,v)=>+v<11.5?'font-size="11.5"':m);        /* nothing smaller than 11.5px */
+  return `<svg viewBox="0 0 ${W} ${low}" xmlns="http://www.w3.org/2000/svg" font-family="'IBM Plex Sans',system-ui,sans-serif"><defs>${mk("a",AMB)}${mk("g",MUT)}${mk("k",INK)}${mk("r",BAD)}</defs>${big(o+ghosts+arrows+labels)}</svg>`;
 }
 /* ---------- memory layout view: the same state as raw bytes ---------- */
 const LIMIT=96;                                                  /* bytes drawn per variable or block */
@@ -1579,6 +1606,7 @@ function render(){
   pic.innerHTML=bugHTML(s)+wordsHTML()+leakHTML(s)+ladderHTML(s)+(view==="mem"?(z?`<div class="zo"><div class="zw" style="transform:scale(${z})">${renderMem(s)}</div></div>`:renderMem(s)):renderCards(s));
   pic.querySelectorAll(".ladder").forEach(p=>p.style.zoom=z||1);
   if(view==="cards"){ const svg=pic.querySelector("svg"), vb=svg&&svg.getAttribute("viewBox");
+    if(svg) svg.style.minWidth="0";                                                              /* the cards already wrap to fit */
     if(vb){ const W=+vb.split(" ")[2], zz=z||Math.max(0.8,(pic.clientWidth-20)/W);                      /* fit, but never below 80% */
       if(z||zz>(pic.clientWidth-20)/W){ svg.style.width=(W*zz)+"px"; svg.style.minWidth="0"; } } }
   renderWatch(); showWatchBadges();
@@ -1748,7 +1776,9 @@ $("code").addEventListener("mousedown",e=>{ if(e.shiftKey) e.preventDefault(); }
 const setBarH=()=>document.documentElement.style.setProperty("--barh",$("bar").offsetHeight+"px");
 setBarH(); window.addEventListener("resize",setBarH);
 loadSet();
-window.addEventListener("resize",()=>{ if(TRACE&&view==="mem") drawArrows(false); });
+let RSZ=null;
+window.addEventListener("resize",()=>{ if(TRACE&&view==="mem") drawArrows(false);
+  if(TRACE&&view==="cards"){ clearTimeout(RSZ); RSZ=setTimeout(draw,150); } });            /* cards wrap to the new width */
 </script>
 </body>
 </html>
