@@ -100,32 +100,37 @@ def user_mem(p):
     return None
 
 def plan(func):
-    """which 8-byte words this call is likely to write, most likely first"""
+    """which 8-byte words this call is likely to write, most likely first, as (words, guess, partial):
+       guess   - we picked which freed block malloc will hand back, and may be wrong
+       partial - the call may write more words than the watchpoints can cover"""
     a = [reg(r) for r in ("rdi", "rsi", "rdx", "rcx")]
     if func == "free":                                    # the block's first 2 words, and the next chunk's header
-        if not a[0]: return []
+        if not a[0]: return [], False, False
         nxt = a[0] - 16 + chunk_size(a[0])
-        return [a[0], a[0] + 8, nxt, nxt + 8]
+        return [a[0], a[0] + 8, nxt, nxt + 8], False, False
     if func in ("malloc", "calloc", "realloc"):          # malloc hands back the newest freed block of the right size
         n = {"malloc": a[0], "calloc": a[0] * a[1], "realloc": a[1]}[func]
         want, seen, out = max(32, (n + 8 + 15) & ~15), set(), []
         if func == "realloc" and a[0]: out += [a[0], a[0] + 8]
         for p in reversed(FREE_ORDER):
             if p in FREED and p not in seen and chunk_size(p) == want: seen.add(p); out += [p, p + 8]
-        return out
+        guess = len(seen) > 0
+        partial = (func == "calloc" and guess and n > 16) or (func == "realloc" and a[0] and n > 16)   # zeroing or copying n bytes
+        return out, guess, partial
     out = []                                              # anything else: the memory its pointer arguments point into
     for p in a:
         m = user_mem(p)
-        if m: out += list(range(p - p % 8, min(m[1], p + 8 * WATCH_MAX), 8))
-    return out
+        if m: out += list(range(p - p % 8, m[1], 8))
+    return out, False, len(set(out)) > WATCH_MAX
 
 ALLOCS = ("malloc", "calloc", "realloc", "free")
 
 def arm(func, line):
     global watch_ok
     disarm()
-    call = {"func": func, "line": line, "arg": reg("rdi"), "watched": [], "writes": []}
-    for w in plan(func):
+    words, guess, partial = plan(func)
+    call = {"func": func, "line": line, "arg": reg("rdi"), "watched": [], "writes": [], "guess": guess, "partial": partial}
+    for w in words:
         if len(WPS) >= WATCH_MAX or not watch_ok: break
         if w in call["watched"] or not raw(w, 8): continue
         try: WPS.append(Watch(w, call)); call["watched"].append(w)
@@ -310,7 +315,7 @@ def snapshot():
         ret = returned(steps[-1]["frames"][0]["func"])
     steps.append({"line": sal.line, "func": frame.name(), "frames": frames,
                   "heap": heap_now(), "chunks": chunks, "ret": ret, "out": console(),
-                  "lib": [c for c in LIBCALLS if c["writes"] or c["func"] in ALLOCS]})   # what the watchpoints caught
+                  "lib": [c for c in LIBCALLS if c["writes"] or c["func"] in ALLOCS or c["partial"]]})   # what the watchpoints caught
     del LIBCALLS[:]
 
 class NoWatch(Exception): pass

@@ -190,7 +190,11 @@ svg.arrows path.hoparrow{stroke:#1F5FA0;stroke-width:3.4;animation:hopin .35s bo
 .wr td b{color:var(--ink)}
 .wr tr{cursor:pointer}
 .wr tr:hover td,.wr tr.on td{color:var(--reach)}
-.wlib{font:600 10.5px var(--sans);color:var(--ink);background:#EEF2F7;border-radius:6px;padding:0 5px;margin-left:6px}
+.gchip{display:inline-block;font:600 11.5px/18px var(--sans);color:var(--muted);background:#fff;border:1px dashed var(--border);border-radius:999px;padding:0 8px;white-space:nowrap;vertical-align:1px}
+.caveat{background:#F8FAFC;border:1px dashed var(--border);border-radius:10px;padding:6px 12px;margin:0 0 12px;font-size:13px;color:var(--ink)}
+.caveat div{margin:2px 0}
+.caveat .gchip{margin-right:6px}
+.wlib{white-space:nowrap;font:600 10.5px var(--sans);color:var(--ink);background:#EEF2F7;border-radius:6px;padding:0 5px;margin-left:6px}
 .r.watched,.card.watched{position:relative;box-shadow:inset 3px 0 0 var(--ink)}
 .r.watched::before,.card.watched::before{content:attr(data-w);position:absolute;right:-8px;top:-8px;background:var(--ink);color:#fff;font:700 10px/15px var(--sans);padding:0 6px;border-radius:8px;z-index:2}
 .ladder .lw{float:right;margin:-2px 10px 0 0;font-size:12px;padding:2px 9px}
@@ -301,7 +305,7 @@ button.icon{width:30px;padding:4px 0;font-weight:700;border-radius:50%}
   <div class="hrow"><svg width="56" height="22" aria-hidden="true"><path d="M3,11 H46" stroke="#B45309" stroke-width="1.6" stroke-dasharray="4 3" fill="none"/><path d="M44,7 L52,11 L44,15 L46,11z" fill="#B45309"/></svg><span>At a call: where a parameter's value came from. After a return: where the value goes</span></div>
   <div class="hrow"><span class="sw lost"></span><span>Leaked: nothing points to it any more</span></div>
   <div class="hrow"><span class="sw freed"></span><span>Freed: given back with free()</span></div>
-  <div class="hrow"><span class="sw txt" style="font-size:10px">free() wrote…</span><span>Under a card: a library call wrote into this block on this line (a gdb watchpoint caught it)</span></div>
+  <div class="hrow" style="grid-template-columns:1fr;gap:3px;padding:5px 0"><span class="sw txt" style="font-size:11px;white-space:nowrap;width:auto">free() wrote 16 bytes here</span><span>Under a card: a library call wrote into this block on this line (a gdb watchpoint caught it)</span></div>
   <div class="hrow"><span class="sw txt">??</span><span>Not set yet: whatever bytes were left there</span></div>
   <div class="hrow"><svg width="56" height="22" aria-hidden="true"><rect x="2" y="4" width="8" height="14" rx="2" fill="#BFDBFE"/><rect x="14" y="4" width="8" height="14" rx="2" fill="#93C5FD"/><rect x="26" y="4" width="8" height="14" rx="2" fill="#3B82F6"/><rect x="38" y="4" width="8" height="14" rx="2" fill="#1D4ED8"/></svg><span>Bar on the left of a box: how many hops away it is (own, 1, 2, 3+)</span></div>
   <div class="hrow"><svg width="56" height="22" aria-hidden="true"><rect x="2" y="2" width="5" height="18" rx="2.5" fill="#334155"/><rect x="16" y="2" width="5" height="18" rx="2.5" fill="#0F766E"/><rect x="30" y="2" width="5" height="18" rx="2.5" fill="#6D28D9"/></svg><span>Each function has its own colour; main is always slate</span></div>
@@ -313,7 +317,10 @@ button.icon{width:30px;padding:4px 0;font-weight:700;border-radius:50%}
   <div class="hrow"><span class="spm rz" style="position:static">red zone</span><span>Below rsp. A function that calls nothing may keep its locals here</span></div>
   <h3>Watches</h3>
   <div class="hrow"><span class="wk" style="justify-self:start">W1</span><span>A box you're watching</span></div>
-  <div class="hrow"><span class="wlib" style="margin:0">inside free()</span><span>In a watch's history: this change happened inside a library call</span></div>
+  <div class="hrow" style="grid-template-columns:1fr;gap:3px;padding:5px 0"><span class="wlib" style="margin:0">inside free()</span><span>In a watch's history: this change happened inside a library call</span></div>
+  <h3>Watchpoint marks</h3>
+  <div class="hrow" style="grid-template-columns:1fr;gap:3px;padding:5px 0"><span class="gchip">guess: may be wrong</span><span>malloc() will hand back one of the freed blocks, but trace.py can't know which one before it runs. It guesses the newest freed block of the right size and watches only that. If the guess is wrong, a write inside malloc() isn't shown</span></div>
+  <div class="hrow" style="grid-template-columns:1fr;gap:3px;padding:5px 0"><span class="gchip">some writes may be missed</span><span>The CPU has only 4 hardware watchpoints of 8 bytes each (32 bytes). This call may write more than that (memset on a big struct, calloc, realloc), so writes past those 32 bytes aren't shown</span></div>
   <h3>Memory layout</h3>
   <div class="hrow"><span class="sw bytes amb">0a</span><span>A byte that changed</span></div>
   <div class="hrow"><span class="sw bytes hatch"></span><span>Padding: bytes no variable uses</span></div>
@@ -821,16 +828,16 @@ function libBytes(s){                                              /* byte addre
   if(s._lib) return s._lib;
   const M=new Map();
   (s.lib||[]).forEach(c=>(c.writes||[]).forEach(w=>{ const o=hx(w.old), n=hx(w.new);
-    for(let k=0;k<(w.size||8);k++) if(o[k]!==n[k]){ const was=M.get(w.addr+k); M.set(w.addr+k,{func:c.func,in:w.in,old:was?was.old:o[k],now:n[k]}); } }));
+    for(let k=0;k<(w.size||8);k++) if(o[k]!==n[k]){ const was=M.get(w.addr+k); M.set(w.addr+k,{func:c.func,in:w.in,old:was?was.old:o[k],now:n[k],guess:!!c.guess}); } }));
   Object.defineProperty(s,"_lib",{value:M});                      /* not saved with the trace */
   return M;
 }
 function libIn(s,a,size){                                          /* did a library call write into [a, a+size) on this step? */
-  const M=libBytes(s); let n=0, func=null;
-  for(let k=0;k<size;k++){ const b=M.get(a+k); if(b){ n++; func=func||b.func; } }
-  return n?{n,func}:null;
+  const M=libBytes(s); let n=0, func=null, guess=false;
+  for(let k=0;k<size;k++){ const b=M.get(a+k); if(b){ n++; func=func||b.func; guess=guess||b.guess; } }
+  return n?{n,func,guess}:null;
 }
-const libTip=(s,a,size)=>{ const w=libIn(s,a,size); return w?`\n${w.func}() wrote ${w.n} byte${w.n===1?"":"s"} here on this line: a gdb watchpoint caught it`:""; };
+const libTip=(s,a,size)=>{ const w=libIn(s,a,size); return w?`\n${w.func}() wrote ${w.n} byte${w.n===1?"":"s"} here on this line: a gdb watchpoint caught it`+(w.guess?" (on a guessed block: may be wrong)":""):""; };
 function keyRange(s,key){                                          /* [start, end) of a box: v:addr, b:addr or h:addr:field */
   const b=key&&boxIn(s,key); if(!b) return null;
   if(b.v) return [b.v.addr,b.v.addr+(b.v.size||8)];
@@ -846,7 +853,7 @@ function libWords(i){                                              /* "Inside fr
   const S=TRACE.steps[i], P=TRACE.steps[i-1], out=[];
   const fieldTxt=(n,fd)=>!n||!fd?"?":fd.kind==="ptr"?show(fd.value):fd.kind==="int"?String(fd.value):(arrText(fd.type,fd.size,fieldHex(n,fd),20)||"—");
   (S.lib||[]).forEach(c=>{
-    const groups=new Map(), fn=kc(c.func+"()");
+    const groups=new Map(), fn=kc(c.func+"()"), n0=out.length;
     (c.writes||[]).forEach(w=>{ const o=hx(w.old), nw=hx(w.new), ks=[];
       for(let k=0;k<8;k++) if(o[k]!==nw[k]) ks.push(w.addr+k);
       if(!ks.length) return;
@@ -878,8 +885,21 @@ function libWords(i){                                              /* "Inside fr
       else if(t.v){ const key="v:"+t.v.addr; out.push(`Inside ${fn}, a gdb watchpoint caught a write to ${kc(boxName(S,key,S.frames[0]?S.frames[0].func:""))}: ${kc(boxVal(P,key))} → ${kc(boxVal(S,key))}.`); }
       else out.push(`Inside ${fn}, a gdb watchpoint caught a write at ${kc(show(t.a))}.`);
     });
+    const tag=(c.guess?" "+GCHIP:"")+(c.partial?" "+PCHIP:"");            /* how sure we are */
+    if(tag) for(let k=n0;k<out.length;k++) out[k]+=tag;
   });
   return out;
+}
+
+const GCHIP=`<span class="gchip" title="trace.py guessed which freed block malloc() hands back">guess: may be wrong</span>`,
+      PCHIP=`<span class="gchip" title="more bytes than 4 watchpoints × 8 bytes can cover">some writes may be missed</span>`;
+function caveatHTML(s){                                            /* this step's watchpoints were a guess, or couldn't cover everything */
+  const L=s.lib||[], g=L.filter(c=>c.guess), p=L.filter(c=>c.partial);
+  if(!g.length&&!p.length) return "";
+  const fns=cs=>esc([...new Set(cs.map(c=>c.func+"()"))].join(", "));
+  return `<div class="caveat">`+
+    (g.length?`<div>${GCHIP}trace.py guessed which freed block ${fns(g)} would hand back, and watched only that one. If the guess is wrong, a write inside ${fns(g)} isn't shown.</div>`:"")+
+    (p.length?`<div>${PCHIP}${fns(p)} may write more bytes than the 4 hardware watchpoints (4 × 8 bytes) can cover, so some of its writes aren't shown.</div>`:"")+`</div>`;
 }
 
 /* ---------- watches: follow one expression through the whole trace, like gdb's watch ---------- */
@@ -900,7 +920,7 @@ function watchHistory(w){                                        /* every step's
   w.vals=TRACE.steps.map(s=>watchAt(w,s)); w.mode=simple; w.ch=[]; w.lib={};
   for(let i=1;i<w.vals.length;i++) if(w.vals[i].txt!==w.vals[i-1].txt){ w.ch.push(i);
     const S=TRACE.steps[i], k=w.vals[i].key||w.vals[i-1].key, r=keyRange(S,k)||keyRange(TRACE.steps[i-1],k), lw=r&&libIn(S,r[0],r[1]-r[0]);
-    if(lw) w.lib[i]=lw.func; }                                     /* a gdb watchpoint saw a library call change it */
+    if(lw) w.lib[i]=lw.func+"()"+(lw.guess?" · guess":""); }                                     /* a gdb watchpoint saw a library call change it */
 }
 const WCH=()=>new Set(WATCH.flatMap(w=>w.ch||[]));
 function addWatch(fn,ex){
@@ -923,10 +943,10 @@ function renderWatch(){
     const v=w.vals[at], now=w.ch.includes(at), fc=w.fn?fcol(w.fn)[0]:MUT;
     const vals=w.ch.filter(i=>!w.vals[i].off&&!w.vals[i-1].off).length;
     const tick=i=>{ const x=(N>1?i/(N-1):0)*1000, off=w.vals[i].off||w.vals[i-1].off;
-      return `<rect data-go="${i}" x="${x-3}" y="3" width="6" height="12" rx="1.5" fill="${off?"#C8D2DE":AMB}"><title>step ${i+1}: ${esc(w.vals[i-1].txt)} → ${esc(w.vals[i].txt)}${w.lib[i]?` (inside ${esc(w.lib[i])}())`:""}</title></rect>`; };
+      return `<rect data-go="${i}" x="${x-3}" y="3" width="6" height="12" rx="1.5" fill="${off?"#C8D2DE":AMB}"><title>step ${i+1}: ${esc(w.vals[i-1].txt)} → ${esc(w.vals[i].txt)}${w.lib[i]?` (inside ${esc(w.lib[i])})`:""}</title></rect>`; };
     const cx=(N>1?at/(N-1):0)*1000;
     const hist=w.ch.slice(0,300).map(i=>{ const RA=ranAt(i);
-      return `<tr data-go="${i}"${i===at?' class="on"':""}><td>step ${i+1}</td><td>line ${RA?RA.line:TRACE.steps[i].line}</td><td>${esc(w.vals[i-1].txt)} → <b>${esc(w.vals[i].txt)}</b>${w.lib[i]?`<span class="wlib" title="a gdb watchpoint caught this write">inside ${esc(w.lib[i])}()</span>`:""}</td></tr>`; }).join("");
+      return `<tr data-go="${i}"${i===at?' class="on"':""}><td>step ${i+1}</td><td>line ${RA?RA.line:TRACE.steps[i].line}</td><td>${esc(w.vals[i-1].txt)} → <b>${esc(w.vals[i].txt)}</b>${w.lib[i]?`<span class="wlib" title="a gdb watchpoint caught this write">inside ${esc(w.lib[i])}</span>`:""}</td></tr>`; }).join("");
     return `<div class="wr">`+
       `<span class="wt"><span class="wk">W${k+1}</span><code>${esc(w.ex)}</code><span class="wf" style="color:${fc}">${w.fn?`in ${esc(w.fn)}`:"in the running function"}</span></span>`+
       `<span class="wv${now?" now":""}${v.off?" off":""}${v.bad?" bad":""}">${esc(v.txt)}</span>`+
@@ -1293,7 +1313,7 @@ function renderCards(s){
     });
     const lw=libIn(s,n.addr,n.size||16);                          /* a library call wrote into it on this line */
     o+=(lost?`<text x="${bx+CW/2}" y="${HY+CARDH+17}" font-size="12.5" font-weight="700" text-anchor="middle" fill="${BAD}">leaked: nothing points here</text>`:"")+
-      (lw?`<text x="${bx+CW/2}" y="${HY+CARDH+(lost?33:16)}" font-size="10" font-weight="700" text-anchor="middle" fill="${INK}" data-tip="${esc(`a gdb watchpoint caught ${lw.func}() writing ${lw.n} byte${lw.n===1?"":"s"} into this block, inside the library`)}">${esc(lw.func)}() wrote ${lw.n} byte${lw.n===1?"":"s"} here</text>`:"")+`</g>`;
+      (lw?`<text x="${bx+CW/2}" y="${HY+CARDH+(lost?33:16)}" font-size="10" font-weight="700" text-anchor="middle" fill="${INK}" data-tip="${esc(`a gdb watchpoint caught ${lw.func}() writing ${lw.n} byte${lw.n===1?"":"s"} into this block, inside the library${lw.guess?". It watched this block on a guess: may be wrong":""}`)}">${esc(lw.func)}() wrote ${lw.n} byte${lw.n===1?"":"s"} here${lw.guess?" (guess)":""}</text>`:"")+`</g>`;
   });
   const label=(tx,x0,y0,col)=>{ const hw=tx.length*3.3+5, lx=Math.max(16+hw,Math.min(W-16-hw,x0));
     return `<rect x="${lx-hw}" y="${y0-12}" width="${2*hw}" height="16" rx="5" fill="#fff" opacity="0.94"/>`+
@@ -1533,7 +1553,7 @@ function renderMem(s){
     if(c.cls==="none") return `<i class="c none" data-tip="past the end of the struct"></i>`;
     const old=P?(c.hdr?P.hdr:P.bytes).get(c.a):undefined, hot=!!P&&(c.hdr?old!==undefined&&old!==c.h:old!==c.h), lb=LB.get(c.a);
     const tip=`byte at ${real(c.a)}`+(hot?`\nwas ${old===undefined?"not on screen":old}`:"")+
-      (lb?`\nwritten inside ${lb.func}()${lb.in&&lb.in!==lb.func?`, in ${lb.in}`:""}: a gdb watchpoint caught it`:"");
+      (lb?`\nwritten inside ${lb.func}()${lb.in&&lb.in!==lb.func?`, in ${lb.in}`:""}: a gdb watchpoint caught it${lb.guess?" (on a guessed block: may be wrong)":""}`:"");
     const cls=(c.cls||"")+(lb?" lib":"");
     return hot?`<i class="c chg ${cls}" style="--k:${k++}" data-tip="${esc(tip)}"><b class="o">${old||""}</b><b class="n">${c.h}</b></i>`
               :`<i class="c ${cls}" data-tip="${esc(tip)}">${c.h}</i>`;
@@ -1603,7 +1623,7 @@ function drawArrows(anim){                                       /* each pointer
 function render(){
   const s=TRACE.steps[at];
   const z=PZ==="fit"?null:+PZ/100, pic=$("pic");
-  pic.innerHTML=bugHTML(s)+wordsHTML()+leakHTML(s)+ladderHTML(s)+(view==="mem"?(z?`<div class="zo"><div class="zw" style="transform:scale(${z})">${renderMem(s)}</div></div>`:renderMem(s)):renderCards(s));
+  pic.innerHTML=bugHTML(s)+caveatHTML(s)+wordsHTML()+leakHTML(s)+ladderHTML(s)+(view==="mem"?(z?`<div class="zo"><div class="zw" style="transform:scale(${z})">${renderMem(s)}</div></div>`:renderMem(s)):renderCards(s));
   pic.querySelectorAll(".ladder").forEach(p=>p.style.zoom=z||1);
   if(view==="cards"){ const svg=pic.querySelector("svg"), vb=svg&&svg.getAttribute("viewBox");
     if(svg) svg.style.minWidth="0";                                                              /* the cards already wrap to fit */

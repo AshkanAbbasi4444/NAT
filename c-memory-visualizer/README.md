@@ -21,3 +21,10 @@ A learning tool that shows what a C program does to memory, step by step.
 - Every write made inside the library is saved in the trace (`"lib"` on each step).
 - If the computer can't do hardware watchpoints, the trace still works, without them
   (`"watchpoints": false`).
+
+Two marks tell you when a step's watchpoints might not show everything:
+- `"guess": true` (viewer: **guess: may be wrong**): for `malloc()`, `calloc()` and `realloc()`,
+  trace.py guesses which freed block will come back (the newest freed one of the right size)
+  and watches only that one.
+- `"partial": true` (viewer: **some writes may be missed**): the call may write more than
+  4 × 8 = 32 bytes, which is all the watchpoints can cover.
