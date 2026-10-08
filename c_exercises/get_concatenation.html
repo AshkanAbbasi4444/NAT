@@ -1,0 +1,703 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Array Concatenation Trace</title>
+<style>
+:root{
+  --ink:#36454F; --mute:#708090; --line:#D3D3D3; --panel:#F2F3F4;
+  --amb:#FAEEDA; --ambInk:#854F0B; --bg:#FFFFFF; --cur:#E4E7EA; --z:1;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);
+  font:15px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+code,.mono{font-family:var(--mono)}
+#app{height:100vh;display:flex;flex-direction:column}
+
+/* ---- the one bar ---- */
+.bar{display:flex;flex-wrap:wrap;align-items:flex-start;background:var(--panel);
+  border-bottom:1px solid var(--line)}
+#bar{flex:1 1 320px;min-width:0}
+#bar>summary{list-style:none;cursor:pointer;padding:8px 16px;display:flex;
+  flex-wrap:wrap;gap:4px 12px;align-items:baseline;user-select:none}
+#bar>summary::-webkit-details-marker{display:none}
+.tri{display:inline-block;width:1em;color:var(--mute);transition:transform .15s}
+#bar[open] .tri{transform:rotate(90deg)}
+.pg{font-family:var(--mono);color:var(--mute);font-size:13px}
+.ttl{font-weight:600}
+.crumb{color:var(--mute);font-size:13px}
+.badge{font-family:var(--mono);font-size:12px;border:1px solid var(--ink);border-radius:10px;
+  padding:0 8px;white-space:nowrap}
+.badge.f{border-style:dashed;color:var(--mute);border-color:var(--mute)}
+.body{display:grid;grid-template-columns:minmax(0,auto) minmax(260px,1fr);gap:12px 24px;
+  padding:0 16px 12px 40px}
+@media (max-width:820px){.body{grid-template-columns:1fr;padding-left:16px}}
+pre.code{margin:0;background:#fff;border:1px solid var(--line);border-radius:6px;padding:8px 0;
+  font:13px/1.55 var(--mono);overflow-x:auto}
+pre.code .ln{display:block;padding:0 12px 0 22px;position:relative;white-space:pre}
+pre.code .ln.on{background:var(--cur);font-weight:600}
+pre.code .ln.on::before{content:"▶";position:absolute;left:6px;font-size:10px;top:2px}
+pre.code .cap{display:block;padding:0 12px;color:var(--mute);font-size:11px}
+.plain{margin:0 0 6px}
+.note{margin:0;color:var(--mute);font-size:14px}
+.note b{color:var(--ink)}
+.hint{margin:8px 0 0;color:var(--mute);font-size:12px}
+
+/* controls are siblings of <details>, never inside <summary> */
+.controls{display:flex;gap:6px;padding:6px 12px;flex-wrap:wrap;align-items:center}
+.controls button{font:13px var(--mono);color:var(--ink);background:#fff;border:1px solid var(--line);
+  border-radius:5px;padding:3px 9px;cursor:pointer;min-height:28px}
+.controls button[aria-pressed=true]{border-color:var(--ink);font-weight:700}
+.controls button.replay{background:var(--amb);color:var(--ambInk);border-color:var(--ambInk)}
+.controls .zv{font:12px var(--mono);color:var(--mute);min-width:3.4em;text-align:center}
+.controls .nav{padding:3px 8px}
+
+/* ---- the picture ---- */
+#scroll{flex:1;overflow:auto;background:var(--bg)}
+#pic{width:calc(var(--z) * 100%);padding:8px 16px}
+#pic svg{display:block;width:100%;height:auto}
+svg text{fill:var(--ink)}
+svg .m{fill:var(--mute)}
+svg .mono{font-family:var(--mono)}
+svg [data-k]{cursor:pointer}
+.ghost{opacity:.45}
+.dim{opacity:.22}
+.fly{animation:fly .9s cubic-bezier(.3,.7,.3,1) both}
+@keyframes fly{from{transform:translate(var(--dx),var(--dy))}to{transform:translate(0,0)}}
+.arrive{animation:arrive .15s both}
+@keyframes arrive{from{opacity:0}to{opacity:1}}
+.pop{animation:pop .5s ease-out both}
+@keyframes pop{from{opacity:.2}to{opacity:1}}
+
+/* ---- detail panel (only after a click) ---- */
+#detail{border-top:1px solid var(--line);background:var(--panel);padding:10px 16px;max-height:40vh;overflow:auto}
+#detail[hidden]{display:none}
+#detail h3{margin:0 0 6px;font-size:14px}
+#detail ol{margin:0;padding-left:20px;font-size:14px}
+#detail li{margin:2px 0}
+#detail a{color:var(--ink);font-family:var(--mono);cursor:pointer}
+#detail .x{float:right;border:0;background:none;font-size:18px;cursor:pointer;color:var(--mute)}
+
+/* ---- cover ---- */
+.cover{max-width:880px;margin:0 auto;padding:28px 16px 40px}
+.cover h1{margin:0 0 4px;font-size:28px}
+.cover .sub{color:var(--mute);margin:0 0 20px}
+.cover table{border-collapse:collapse;font-size:14px;margin-top:8px}
+.cover td{padding:3px 12px 3px 0;vertical-align:top}
+.cover kbd{font:12px var(--mono);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;
+  padding:1px 6px;background:#fff}
+.cover .go{margin-top:22px;font-weight:600}
+.cover .two{display:grid;grid-template-columns:minmax(0,auto) minmax(260px,1fr);gap:24px}
+.cover td:first-child{white-space:nowrap}
+@media (max-width:720px){.cover .two{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="bar">
+    <details id="bar"></details>
+    <div class="controls" id="controls">
+      <button class="nav" data-act="prev" title="previous (←)">←</button>
+      <button class="nav" data-act="next" title="next (→)">→</button>
+      <button data-act="view" data-v="model" title="model view (v)">boxes</button>
+      <button data-act="view" data-v="bytes" title="literal view (v)">bytes</button>
+      <button class="replay" data-act="replay" title="replay (r)">▶ replay</button>
+      <button data-act="zout" title="smaller (−)">−</button>
+      <span class="zv" id="zv">100%</span>
+      <button data-act="zin" title="bigger (+)">+</button>
+    </div>
+  </div>
+  <div id="scroll"><div id="pic"></div></div>
+  <div id="detail" hidden></div>
+</div>
+
+<script>
+/* =====================================================================
+   Source code shown in the bar
+   ===================================================================== */
+const FN = [
+  'int* getConcatenation(int* nums, int numsSize, int* returnSize) {',
+  '  int *ans = malloc(sizeof(int) * numsSize * 2);',
+  '  for (int i = 0; i < numsSize; i++) {',
+  '    ans[i] = nums[i];',
+  '    ans[i + numsSize] = nums[i];',
+  '  }',
+  '  *returnSize = numsSize * 2;',
+  '  return ans;',
+  '}'
+];
+const CALLER = [
+  'int nums[] = {1, 2, 1};  int len;',
+  'int *out = getConcatenation(nums, 3, &len);',
+  'free(out);'
+];
+
+/* =====================================================================
+   Memory model: keys, names, addresses
+   m.* = main's frame, f.* = getConcatenation's frame, h.* = heap block
+   ===================================================================== */
+const HEAP = 0x4056c0;
+const ADDR = {
+  'm.nums.0':0x7ffc20,'m.nums.1':0x7ffc24,'m.nums.2':0x7ffc28,
+  'm.len':0x7ffc1c,'m.out':0x7ffc10,
+  'f.nums':0x7ffbf0,'f.numsSize':0x7ffbec,'f.returnSize':0x7ffbe0,'f.ans':0x7ffbd8,'f.i':0x7ffbd4
+};
+const NAME = {
+  'm.nums.0':'nums[0] (main)','m.nums.1':'nums[1] (main)','m.nums.2':'nums[2] (main)',
+  'm.len':'len (main)','m.out':'out (main)',
+  'f.nums':'nums (param)','f.numsSize':'numsSize','f.returnSize':'returnSize','f.ans':'ans','f.i':'i'
+};
+const SHORT = {'m.len':'len','m.out':'out','f.nums':'nums','f.numsSize':'numsSize',
+  'f.returnSize':'returnSize','f.ans':'ans','f.i':'i'};
+const HK = [0,1,2,3,4,5].map(k => 'h.' + k);
+HK.forEach((k, j) => { ADDR[k] = HEAP + 4 * j; NAME[k] = 'ans[' + j + ']'; SHORT[k] = 'ans[' + j + ']'; });
+[0,1,2].forEach(j => SHORT['m.nums.' + j] = 'nums[' + j + ']');
+const PTR = new Set(['m.out','f.nums','f.returnSize','f.ans']);
+const FK = ['f.nums','f.numsSize','f.returnSize','f.ans','f.i'];
+const MK = ['m.nums.0','m.nums.1','m.nums.2','m.len','m.out'];
+const GROUP = {f: FK, h: HK};           // group-key changes touch every member
+const ALLK = [...MK, ...FK, ...HK];
+
+const hex = n => '0x' + n.toString(16);
+function show(k, v){ if (v === undefined) return ''; if (v === null) return '?'; return PTR.has(k) ? hex(v) : String(v); }
+
+/* =====================================================================
+   Parallel arrays — one entry per page. SRC / CRUMB / META / STATES.
+   STATES are built by applying each step's mutation to a copy of the last.
+   Each state carries only: values (v), what it read (rd), where copied
+   values came from (src), and origin notes for values with no source (why).
+   ===================================================================== */
+const SRC = [
+  null,
+  ['c',0], ['c',1], ['f',1],
+  ['f',2], ['f',3], ['f',4],
+  ['f',2], ['f',3], ['f',4],
+  ['f',2], ['f',3], ['f',4],
+  ['f',2], ['f',6], ['f',7], ['c',2]
+];
+const CRUMB = [
+  'cover',
+  'caller', 'call', 'allocate',
+  'loop · i = 0', 'loop · i = 0', 'loop · i = 0',
+  'loop · i = 1', 'loop · i = 1', 'loop · i = 1',
+  'loop · i = 2', 'loop · i = 2', 'loop · i = 2',
+  'loop · exit', 'report size', 'return', 'cleanup'
+];
+const META = [
+  {title:'Concatenation of Array'},
+  {title:'The caller sets up its data',
+   plain:'Before the call, <b>main</b> owns an array <code>nums = {1, 2, 1}</code> and an <code>int len</code> that has no value yet.',
+   note:'This <code>nums</code> lives in main\'s <b>stack frame</b>, not on the heap. Only memory from <code>malloc</code> lives on the heap.'},
+  {title:'Calling getConcatenation',
+   plain:'A new <b>stack frame</b> is pushed. <code>nums</code> gets the <b>address</b> of main\'s array, <code>numsSize</code> gets 3, and <code>returnSize</code> gets the address of <code>len</code>.',
+   note:'C passes everything by value. The array is <b>not</b> copied, only its 8-byte address. Writing through <code>returnSize</code> is how the function hands back a second result.'},
+  {title:'malloc a block twice as long',
+   plain:'<code>sizeof(int) * numsSize * 2</code> = 4 × 3 × 2 = <b>24 bytes</b>, room for 6 ints. <code>ans</code> now points at that block.',
+   note:'<code>malloc</code> does not zero memory. The six slots hold <b>garbage</b> (shown as ?) until the loop writes them.'},
+  {title:'Loop starts: i = 0', badge:'0 < 3 → true',
+   plain:'<code>i</code> starts at <b>0</b>. The test <code>i &lt; numsSize</code> is true, so we enter the loop body.',
+   note:'Each pass through the loop writes <b>two</b> slots, one in each half.',
+   panel:'i = 0.  Test 0 < 3 → true.  Enter body.'},
+  {title:'ans[0] = nums[0]',
+   plain:'Copy <b>nums[0]</b> (1) into the <b>first half</b> at the same index.',
+   note:'<code>ans[i]</code> fills <code>ans[0..2]</code> with an exact copy in the same positions.'},
+  {title:'ans[3] = nums[0]',
+   plain:'Copy the same value into the <b>second half</b>: index <code>i + numsSize</code> = 0 + 3 = <b>3</b>.',
+   note:'Adding <code>numsSize</code> shifts every write exactly one array-length to the right. That offset is the whole trick.'},
+  {title:'i++ → i = 1', badge:'1 < 3 → true',
+   plain:'<code>i</code> becomes <b>1</b>. 1 &lt; 3, so the loop keeps going.',
+   note:'Compare with page 4: same test, new <code>i</code>.',
+   panel:'i = 1.  Test 1 < 3 → true.  Enter body.'},
+  {title:'ans[1] = nums[1]',
+   plain:'Copy <b>nums[1]</b> (2) into <b>ans[1]</b>.',
+   note:'Same line as page 5. Only <code>i</code> changed, so it reads and writes one slot further along.'},
+  {title:'ans[4] = nums[1]',
+   plain:'Index 1 + 3 = <b>4</b>. Copy <b>2</b> into <b>ans[4]</b>.',
+   note:'The second half is filling up in step with the first.'},
+  {title:'i++ → i = 2', badge:'2 < 3 → true',
+   plain:'<code>i</code> becomes <b>2</b>. 2 &lt; 3, one more pass.',
+   panel:'i = 2.  Test 2 < 3 → true.  Enter body.'},
+  {title:'ans[2] = nums[2]',
+   plain:'Copy <b>nums[2]</b> (1) into <b>ans[2]</b>. The first half is now complete.'},
+  {title:'ans[5] = nums[2]',
+   plain:'Index 2 + 3 = <b>5</b>. Copy <b>1</b> into <b>ans[5]</b>. All six slots are filled.',
+   note:'Two writes per pass means the loop runs only <code>numsSize</code> times (3), not 2 × numsSize.'},
+  {title:'i++ → i = 3, loop ends', badge:'3 < 3 → false',
+   plain:'<code>i</code> becomes <b>3</b>. 3 &lt; 3 is false, so the loop exits.',
+   note:'Nothing in the heap changed on this page. The test is what stops us from writing past <code>nums[2]</code>.',
+   panel:'i = 3.  Test 3 < 3 → false.  Leave loop.'},
+  {title:'*returnSize = 6',
+   plain:'Compute <code>numsSize * 2</code> = <b>6</b> and write it <b>through</b> <code>returnSize</code>. It lands in main\'s <b>len</b>.',
+   note:'A function can <code>return</code> only one value, so the length travels back through a pointer the caller supplied. LeetCode reads <code>*returnSize</code> to know how many elements to check.',
+   panel:'Read returnSize → 0x7ffc1c.  Write 6 (4 bytes) at 0x7ffc1c, which is len in main.'},
+  {title:'return ans',
+   plain:'The frame is <b>popped</b>: <code>nums</code>, <code>numsSize</code>, <code>returnSize</code>, <code>ans</code> and <code>i</code> are gone. The address <code>0x4056c0</code> is copied into main\'s <b>out</b>.',
+   note:'The heap block <b>survives</b> because malloc memory is not tied to any frame. Returning the address of a local array here would have been a bug.'},
+  {title:'free(out)',
+   plain:'main is done with the result and calls <b>free</b>. The 24 bytes go back to the allocator.',
+   note:'<code>out</code> still holds <code>0x4056c0</code> but must not be used now. It is a <b>dangling pointer</b>. Skipping this free would leak 24 bytes per call. (On LeetCode the judge frees it for you.)',
+   panel:'free(0x4056c0).  Block returned to the allocator.  out still holds 0x4056c0 (dangling).'}
+];
+
+const STATES = [];
+(function build(){
+  let cur = {};
+  const step = (mut, h = {}) => {
+    cur = Object.assign({}, cur); mut(cur);
+    STATES.push({v: cur, rd: h.rd || [], src: h.src || {}, why: h.why || {}});
+  };
+  const copy = (k, j) => step(s => { s['h.' + k] = s['m.nums.' + j]; },
+    {rd: ['f.ans','f.nums','f.i'].concat(k >= 3 ? ['f.numsSize'] : [], ['m.nums.' + j]),
+     src: {['h.' + k]: 'm.nums.' + j}});
+  const loop = i => step(s => { s['f.i'] = i; }, {rd: ['f.numsSize'],
+     why: {'f.i': i === 0 ? 'initialised by "int i = 0"' : 'incremented by i++'}});
+
+  step(() => {});                                           // 0 cover
+  step(s => { s['m.nums.0'] = 1; s['m.nums.1'] = 2; s['m.nums.2'] = 1; s['m.len'] = null; s['m.out'] = null; },
+    {why: {'m.nums.0':'initialiser {1, 2, 1} in main','m.nums.1':'initialiser {1, 2, 1} in main',
+           'm.nums.2':'initialiser {1, 2, 1} in main','m.len':'declared without a value',
+           'm.out':'not assigned until the call returns'}});   // 1
+  step(s => { s.f = 1; s['f.nums'] = ADDR['m.nums.0']; s['f.numsSize'] = 3;
+              s['f.returnSize'] = ADDR['m.len']; s['f.ans'] = null; },
+    {rd: ['m.nums.0','m.len'],
+     why: {'f.nums':'argument nums, an array, decays to &nums[0] = 0x7ffc20',
+           'f.numsSize':'argument 3 in the call','f.returnSize':'argument &len = 0x7ffc1c',
+           'f.ans':'local, not yet assigned'}});              // 2
+  step(s => { s.h = 'live'; HK.forEach(k => s[k] = null); s['f.ans'] = HEAP; },
+    {rd: ['f.numsSize'], why: {'f.ans':'address returned by malloc(24)'}});  // 3
+  loop(0); copy(0, 0); copy(3, 0);                           // 4 5 6
+  loop(1); copy(1, 1); copy(4, 1);                           // 7 8 9
+  loop(2); copy(2, 2); copy(5, 2);                           // 10 11 12
+  loop(3);                                                    // 13
+  step(s => { s['m.len'] = 6; }, {rd: ['f.returnSize','f.numsSize'],
+     why: {'m.len':'numsSize * 2 = 6, written through returnSize'}});      // 14
+  step(s => { s['m.out'] = s['f.ans']; delete s.f; FK.forEach(k => delete s[k]); },
+    {src: {'m.out':'f.ans'}});                                // 15
+  step(s => { s.h = 'freed'; }, {rd: ['m.out']});             // 16
+})();
+
+/* =====================================================================
+   Derivations: what changed, what was touched, last known values, trace
+   ===================================================================== */
+function changedAt(p){
+  const a = p > 0 ? STATES[p-1].v : {}, b = STATES[p].v, out = new Set();
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  keys.forEach(k => {
+    if (a[k] === b[k]) return;
+    if (GROUP[k]) GROUP[k].forEach(m => out.add(m)); else out.add(k);
+  });
+  return out;
+}
+function touchedAt(p){
+  const t = changedAt(p); STATES[p].rd.forEach(k => t.add(k)); return t;
+}
+function lastKnown(k, p){
+  for (let q = p; q >= 0; q--) if (STATES[q].v[k] !== undefined) return STATES[q].v[k];
+  return undefined;
+}
+function lastSet(k, p){
+  for (let q = p; q >= 1; q--) if (STATES[q].v[k] !== STATES[q-1].v[k]) return q;
+  return -1;
+}
+function trace(key, p){
+  const chain = []; const seen = new Set();
+  let k = key, q = p;
+  while (k && !seen.has(k)){
+    seen.add(k);
+    const s = lastSet(k, q); if (s < 0) break;
+    const st = STATES[s];
+    chain.push({page: s, key: k, val: st.v[k] === undefined ? lastKnown(k, s) : st.v[k],
+                from: st.src[k], why: st.why[k]});
+    k = st.src[k]; q = s - 1;
+  }
+  return chain;
+}
+function srcLine(p){
+  const s = SRC[p]; if (!s) return '';
+  return (s[0] === 'f' ? FN : CALLER)[s[1]].trim().replace(/;$/, '');
+}
+function panelText(p){
+  const st = STATES[p]; if (META[p].panel) return META[p].panel;
+  const ch = changedAt(p); const parts = [];
+  Object.keys(st.src).forEach(d => {
+    const s = st.src[d];
+    parts.push('Read ' + SHORT[s] + ' at ' + hex(ADDR[s]) + ' → ' + show(d, st.v[d]) +
+               '.  Write it at ' + hex(ADDR[d]) + ' (' + SHORT[d] + ').');
+  });
+  if (p === 2) parts.push('Push frame.  nums = 0x7ffc20, numsSize = 3, returnSize = 0x7ffc1c.');
+  else if (p === 3) parts.push('malloc(4 * 3 * 2) = malloc(24) → 0x4056c0.  Contents uninitialised.');
+  else if (p === 1) parts.push('main: nums[0..2] = 1, 2, 1 at 0x7ffc20.  len = ?  out = ?');
+  else if (p === 15) parts.push('Pop frame of getConcatenation.');
+  if (!parts.length) ch.forEach(k => parts.push(SHORT[k] + ' = ' + show(k, st.v[k])));
+  return parts.join('   ');
+}
+function copiedCount(p){ return HK.filter(k => STATES[p].v[k] !== null && STATES[p].v[k] !== undefined).length; }
+
+/* =====================================================================
+   SVG helpers
+   ===================================================================== */
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const T = (x, y, s, a = '') => `<text x="${x}" y="${y}" ${a}>${esc(s)}</text>`;
+function labelTag(x, y, s, anchor = 'start'){
+  const w = s.length * 7.3 + 12;
+  const rx = anchor === 'middle' ? x - w/2 : x - 6;
+  return `<g><rect x="${rx}" y="${y-13}" width="${w}" height="19" rx="4" fill="#fff" stroke="#36454F" stroke-width="1"/>` +
+         `<text x="${anchor === 'middle' ? x : x}" y="${y}" font-size="12" class="mono" text-anchor="${anchor}">${esc(s)}</text></g>`;
+}
+const VBW = 1240, VBH = 500;
+function svgOpen(){
+  return `<svg viewBox="0 0 ${VBW} ${VBH}" xmlns="http://www.w3.org/2000/svg" font-family="system-ui,sans-serif" font-size="13">` +
+    `<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">` +
+    `<path d="M0,0 L10,5 L0,10 z" fill="#36454F"/></marker></defs>`;
+}
+function panelBar(p){
+  return `<rect x="16" y="${VBH-34}" width="${VBW-32}" height="26" rx="5" fill="#F2F3F4"/>` +
+         T(28, VBH-16, panelText(p), 'class="mono" font-size="12"');
+}
+function counter(p, x, y, ch){
+  const n = copiedCount(p), st = STATES[p].v;
+  let s = T(x, y + 17, 'copied', 'class="m"');
+  HK.forEach((k, j) => {
+    const filled = st[k] !== null && st[k] !== undefined;
+    const c = ch.has(k) && filled;
+    s += `<rect x="${x + 60 + j*28}" y="${y}" width="22" height="22" rx="3" fill="${c ? '#FAEEDA' : filled ? '#36454F' : '#fff'}" stroke="${c ? '#854F0B' : '#36454F'}"/>`;
+  });
+  s += T(x + 60 + 6*28 + 8, y + 17, n + ' / 6', 'class="mono" font-weight="600"');
+  const heap = st.h === 'live' ? '24 bytes in use' : st.h === 'freed' ? '0 bytes in use (freed)' : 'nothing allocated';
+  const hc = ch.has('h.0') && (p === 3 || p === 16);
+  s += T(x, y + 52, 'heap', 'class="m"') +
+       `<text x="${x + 60}" y="${y + 52}" class="mono" font-weight="600" ${hc ? 'fill="#854F0B"' : ''}>${heap}</text>`;
+  if (st.h === 'live' && p >= 15) s += T(x + 60, y + 72, 'owned by main now; must be freed', 'class="m" font-size="12"');
+  return s;
+}
+
+/* =====================================================================
+   Model view: boxes and arrows
+   ===================================================================== */
+const L = {
+  'm.nums.0':[40,104,70,44],'m.nums.1':[110,104,70,44],'m.nums.2':[180,104,70,44],
+  'm.len':[300,104,90,44],'m.out':[420,104,160,44],
+  'f.nums':[40,286,160,44],'f.numsSize':[220,286,90,44],'f.returnSize':[330,286,160,44],
+  'f.i':[40,380,90,44],'f.ans':[150,380,160,44]
+};
+HK.forEach((k, j) => L[k] = [660 + 90*j, 232, 90, 54]);
+const TYPE = {'m.len':'int len','m.out':'int *out','f.nums':'int *nums','f.numsSize':'int numsSize',
+  'f.returnSize':'int *returnSize','f.i':'int i','f.ans':'int *ans'};
+const ARROWS = [
+  {from:'f.nums', to:['m.nums.0','m.nums.1','m.nums.2'], d:'M120 286 C120 222 100 222 100 152', lab:[128,203]},
+  {from:'f.returnSize', to:['m.len'], d:'M410 286 C410 222 376 222 376 152', lab:[418,203]},
+  {from:'f.ans', to:HK, d:'M310 402 C560 410 560 259 656 259', lab:[540,372,'middle']},
+  {from:'m.out', to:HK, d:'M580 126 C630 126 620 259 656 259', lab:[604,92]}
+];
+const center = k => [L[k][0] + L[k][2]/2, L[k][1] + L[k][3]/2];
+
+function cellModel(p, k, ch, tch, dimOn, ghost){
+  const [x, y, w, h] = L[k]; const st = STATES[p];
+  let v = st.v[k]; if (ghost) v = lastKnown(k, p);
+  const freed = k[0] === 'h' && st.v.h === 'freed';
+  const c = ch.has(k) && !ghost && st.v[k] !== undefined;
+  const dim = dimOn && !tch.has(k) ? ' dim' : '';
+  const fill = c ? '#FAEEDA' : freed ? '#F2F3F4' : '#fff';
+  const stroke = c ? '#854F0B' : '#36454F';
+  const flies = st.src[k] && c;
+  let s = `<g data-k="${k}" class="${(ghost ? 'ghost' : '') + dim}">`;
+  s += `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" stroke="${stroke}" ${ghost || freed ? 'stroke-dasharray="4 3"' : ''} stroke-width="${c ? 2 : 1}"/>`;
+  const txt = show(k, v);
+  s += `<text x="${x + w/2}" y="${y + h/2 + 6}" text-anchor="middle" class="mono${flies ? ' arrive' : c ? ' pop' : ''}" ` +
+       `font-size="${PTR.has(k) ? 15 : 18}" ${c ? 'fill="#854F0B" font-weight="700"' : v === null ? 'fill="#708090"' : ''}` +
+       `${flies ? ' style="animation-delay:.85s"' : ''}>${esc(txt)}</text>`;
+  if (k[0] === 'h') s += T(x + w/2, y - 8, NAME[k], 'text-anchor="middle" class="mono" font-size="12"');
+  else if (k.startsWith('m.nums')) s += T(x + 3, y + h + 15, hex(ADDR[k]), 'class="mono m" font-size="10"');
+  else s += T(x, y - 8, TYPE[k], 'class="mono" font-size="12"') + T(x, y + h + 15, '@ ' + hex(ADDR[k]), 'class="mono m" font-size="10"');
+  if (k[0] === 'h') s += T(x + w/2, y + h + 16, hex(ADDR[k]), 'text-anchor="middle" class="mono m" font-size="10"');
+  return s + '</g>';
+}
+
+function flyChips(p, view){
+  const st = STATES[p]; let s = ''; let n = 0;
+  Object.keys(st.src).forEach(d => {
+    const sk = st.src[d];
+    const val = show(d, st.v[d]);
+    if (view === 'model'){
+      const [dx, dy] = center(d), [sx, sy] = center(sk);
+      const w = Math.max(44, val.length * 9 + 14);
+      s += `<g class="fly" style="--dx:${sx - dx}px;--dy:${sy - dy}px;animation-delay:${n * .35}s">` +
+           `<rect x="${dx - w/2}" y="${dy - 15}" width="${w}" height="30" rx="6" fill="#FAEEDA" stroke="#854F0B" stroke-width="1.5"/>` +
+           `<text x="${dx}" y="${dy + 5}" text-anchor="middle" class="mono" font-size="15" font-weight="700" fill="#854F0B">${esc(val)}</text></g>`;
+    } else {
+      const D = BL[d], S = BL[sk]; if (!D || !S) return;
+      const bytes = toBytes(d, st.v[d]);
+      bytes.forEach((b, i) => {
+        const bx = D.x + i * BW, by = D.y, sx = S.x + i * BW, sy = S.y;
+        s += `<g class="fly" style="--dx:${sx - bx}px;--dy:${sy - by}px;animation-delay:${(n + i) * .09}s">` +
+             `<rect x="${bx + 1}" y="${by + 1}" width="${BW - 2}" height="${BH - 2}" rx="3" fill="#FAEEDA" stroke="#854F0B"/>` +
+             `<text x="${bx + BW/2}" y="${by + 20}" text-anchor="middle" class="mono" font-size="12" font-weight="700" fill="#854F0B">${b}</text></g>`;
+      });
+    }
+    n++;
+  });
+  return s;
+}
+
+function arrowsModel(p, ch, tch, dimOn){
+  const st = STATES[p]; let lines = '', labels = '';
+  ARROWS.forEach(a => {
+    const live = st.v[a.from] !== undefined && st.v[a.from] !== null;
+    if (!live) return;
+    const freed = a.to === HK && st.v.h === 'freed';
+    let lab = '';
+    if (freed) lab = 'dangling: block was freed';
+    else if (ch.has(a.from)) lab = SHORT[a.from] + ' now holds ' + hex(st.v[a.from]);
+    else if (a.to.some(k => ch.has(k))) lab = 'writing through ' + SHORT[a.from];
+    else if (a.to.some(k => st.rd.includes(k))) lab = 'reading through ' + SHORT[a.from];
+    const active = !!lab;
+    const cls = dimOn && !active ? 'dim' : '';
+    lines += `<path d="${a.d}" fill="none" stroke="#36454F" stroke-width="${active ? 2 : 1.4}" ${freed ? 'stroke-dasharray="6 4"' : ''} marker-end="url(#ah)" class="${cls}"/>`;
+    if (active) labels += labelTag(a.lab[0], a.lab[1], lab, a.lab[2] || 'start');
+  });
+  return lines + labels;
+}
+
+function modelSVG(p){
+  const st = STATES[p], ch = changedAt(p), tch = touchedAt(p);
+  const dimOn = tch.size > 0 && tch.size < ALLK.length;
+  let s = svgOpen();
+  // stack column
+  s += T(20, 26, 'STACK', 'font-weight="700" font-size="12" letter-spacing="1.5" class="m"');
+  s += `<rect x="20" y="40" width="580" height="148" rx="8" fill="none" stroke="#D3D3D3"/>`;
+  s += T(584, 62, 'main()', 'text-anchor="end" font-weight="600"');
+  s += T(40, 96, 'int nums[3]', 'class="mono" font-size="12"');
+  MK.forEach(k => { if (st.v[k] !== undefined) s += cellModel(p, k, ch, tch, dimOn, false); });
+  if (st.v['m.nums.0'] === undefined) s += T(40, 130, '(not started)', 'class="m"');
+
+  const fLive = st.v.f !== undefined, fWas = !fLive && p > 0 && STATES.slice(0, p).some(x => x.v.f);
+  s += `<rect x="20" y="212" width="580" height="240" rx="8" fill="none" stroke="${fLive ? '#36454F' : '#D3D3D3'}" ${fLive ? '' : 'stroke-dasharray="6 5"'}/>`;
+  s += T(584, 236, 'getConcatenation()' + (fWas ? '  popped' : ''), `text-anchor="end" font-weight="600" ${fLive ? '' : 'class="m"'}`);
+  if (fLive || fWas) FK.forEach(k => s += cellModel(p, k, ch, tch, dimOn, fWas));
+  else s += T(40, 330, '(not called yet)', 'class="m"');
+  if (fWas) s += T(40, 262, 'these slots are no longer valid memory', 'class="m" font-size="12"');
+
+  // heap column
+  s += T(660, 26, 'HEAP', 'font-weight="700" font-size="12" letter-spacing="1.5" class="m"');
+  if (st.v.h){
+    const freed = st.v.h === 'freed';
+    s += T(660, 196, freed ? 'freed block (24 bytes), do not touch' : 'malloc(24) → room for 6 ints', `font-weight="600" ${freed ? 'class="m"' : ''}`);
+    HK.forEach(k => s += cellModel(p, k, ch, tch, dimOn, false));
+    const br = (x1, x2, lab, keys) => {
+      const on = keys.some(k => ch.has(k));
+      const c = on ? '#854F0B' : '#708090';
+      return `<path d="M${x1+2} 314 v8 H${x2-2} v-8" fill="none" stroke="${c}" stroke-width="${on ? 2 : 1}"/>` +
+             T((x1 + x2)/2, 342, lab, `text-anchor="middle" class="mono" font-size="12" fill="${c}" ${on ? 'font-weight="700"' : ''}`);
+    };
+    s += br(660, 930, 'first copy: ans[i]', HK.slice(0, 3)) + br(930, 1200, 'second copy: ans[i + numsSize]', HK.slice(3));
+  } else {
+    s += `<rect x="660" y="232" width="540" height="54" rx="6" fill="none" stroke="#D3D3D3" stroke-dasharray="6 5"/>`;
+    s += T(930, 264, 'nothing allocated yet', 'text-anchor="middle" class="m"');
+  }
+  s += counter(p, 660, 384, ch);
+  s += arrowsModel(p, ch, tch, dimOn);
+  s += flyChips(p, 'model');
+  s += panelBar(p);
+  return s + '</svg>';
+}
+
+/* =====================================================================
+   Literal view: the actual bytes, little-endian
+   ===================================================================== */
+const BW = 27, BH = 30;
+const ROWS = [
+  {col:0, y:76,  base:0x7ffc20, fields:[['m.nums.0',0,4],['m.nums.1',4,4],['m.nums.2',8,4]]},
+  {col:0, y:146, base:0x7ffc10, fields:[['m.out',0,8],['m.len',12,4]]},
+  {col:0, y:246, base:0x7ffbf0, fields:[['f.nums',0,8]]},
+  {col:0, y:316, base:0x7ffbe0, fields:[['f.returnSize',0,8],['f.numsSize',12,4]]},
+  {col:0, y:386, base:0x7ffbd0, fields:[['f.i',4,4],['f.ans',8,8]]},
+  {col:1, y:76,  base:0x4056c0, fields:[['h.0',0,4],['h.1',4,4],['h.2',8,4],['h.3',12,4]]},
+  {col:1, y:146, base:0x4056d0, fields:[['h.4',0,4],['h.5',4,4]]}
+];
+const COLX = [110, 760];
+const BL = {};
+ROWS.forEach(r => r.fields.forEach(([k, off, n]) => BL[k] = {x: COLX[r.col] + off * BW, y: r.y, n}));
+
+function toBytes(k, v){
+  const n = PTR.has(k) ? 8 : 4;
+  if (v === null || v === undefined) return Array(n).fill('??');
+  const out = []; let x = v;
+  for (let i = 0; i < n; i++){ out.push((x % 256).toString(16).padStart(2, '0')); x = Math.floor(x / 256); }
+  return out;
+}
+
+function bytesSVG(p){
+  const st = STATES[p], ch = changedAt(p), tch = touchedAt(p);
+  const dimOn = tch.size > 0 && tch.size < ALLK.length;
+  const fLive = st.v.f !== undefined, fWas = !fLive && STATES.slice(0, p).some(x => x.v.f);
+  let s = svgOpen();
+  s += T(20, 26, 'STACK  (higher addresses on top)', 'font-weight="700" font-size="12" letter-spacing="1" class="m"');
+  s += T(660, 26, 'HEAP', 'font-weight="700" font-size="12" letter-spacing="1.5" class="m"');
+  s += T(110, 44, 'main()', 'font-weight="600"');
+  s += T(110, 220, 'getConcatenation()' + (fWas ? '  popped: bytes still there, but no longer yours' : fLive ? '' : '  not called yet'),
+         `font-weight="600" ${fLive ? '' : 'class="m"'}`);
+  s += T(760, 44, st.v.h === 'live' ? 'block from malloc(24)' : st.v.h === 'freed' ? 'freed block' : 'not allocated', `font-weight="600" ${st.v.h === 'live' ? '' : 'class="m"'}`);
+  // byte offset ruler
+  [0, 1].forEach(c => { for (let i = 0; i < 16; i++) s += T(COLX[c] + i*BW + BW/2, 59, '+' + i.toString(16), 'text-anchor="middle" class="mono m" font-size="9"'); });
+
+  ROWS.forEach(r => {
+    const x0 = COLX[r.col];
+    s += T(x0 - 8, r.y + 20, hex(r.base), 'text-anchor="end" class="mono m" font-size="11"');
+    // background bytes (unowned / padding)
+    for (let i = 0; i < 16; i++)
+      s += `<rect x="${x0 + i*BW + .5}" y="${r.y + .5}" width="${BW - 1}" height="${BH - 1}" fill="#F2F3F4" stroke="#D3D3D3"/>`;
+    r.fields.forEach(([k, off, n]) => {
+      const isF = k[0] === 'f', isH = k[0] === 'h';
+      let v = st.v[k], stale = false;
+      if (v === undefined){
+        if (isF && fWas){ v = lastKnown(k, p); stale = true; }
+        else return;
+      }
+      if (isH && st.v.h === 'freed') stale = true;
+      const c = ch.has(k) && st.v[k] !== undefined;
+      const dim = dimOn && !tch.has(k) ? ' dim' : '';
+      const bytes = toBytes(k, v);
+      const flies = c && st.src[k];
+      let g = `<g data-k="${k}" class="${(stale ? 'ghost' : '') + dim}">`;
+      g += T(x0 + off*BW + 2, r.y - 5, SHORT[k] + ' = ' + show(k, v), 'class="mono" font-size="11" ' + (c ? 'fill="#854F0B" font-weight="700"' : ''));
+      bytes.forEach((b, i) => {
+        const bx = x0 + (off + i) * BW;
+        g += `<rect x="${bx + .5}" y="${r.y + .5}" width="${BW - 1}" height="${BH - 1}" fill="${c ? '#FAEEDA' : '#fff'}" stroke="${c ? '#854F0B' : '#36454F'}" ${stale ? 'stroke-dasharray="3 2"' : ''}/>`;
+        g += `<text x="${bx + BW/2}" y="${r.y + 20}" text-anchor="middle" class="mono${flies ? ' arrive' : c ? ' pop' : ''}" font-size="12" ` +
+             `${c ? 'fill="#854F0B" font-weight="700"' : b === '??' ? 'fill="#708090"' : ''}` +
+             `${flies ? ` style="animation-delay:${.85 + i * .09}s"` : ''}>${b}</text>`;
+      });
+      // bracket marking the field's extent
+      g += `<path d="M${x0 + off*BW + 2} ${r.y + BH + 4} v4 H${x0 + (off + n)*BW - 2} v-4" fill="none" stroke="${c ? '#854F0B' : '#708090'}"/>`;
+      s += g + '</g>';
+    });
+  });
+  s += T(760, 222, 'little-endian: lowest byte first, so 1 = 01 00 00 00', 'class="m" font-size="12"');
+  s += T(760, 240, 'and 0x7ffc20 = 20 fc 7f 00 00 00 00 00', 'class="m mono" font-size="12"');
+  s += T(760, 258, '?? = garbage left over from earlier use', 'class="m" font-size="12"');
+  s += counter(p, 760, 300, ch);
+  s += flyChips(p, 'bytes');
+  s += panelBar(p);
+  return s + '</svg>';
+}
+
+/* =====================================================================
+   Bar, cover, trace panel
+   ===================================================================== */
+function codeBlock(p){
+  const s = SRC[p];
+  const lines = (arr, which, cap) => `<span class="cap">${cap}</span>` +
+    arr.map((l, i) => `<span class="ln${s && s[0] === which && s[1] === i ? ' on' : ''}">${esc(l)}</span>`).join('');
+  return `<pre class="code">${lines(CALLER, 'c', '// caller (main)')}<span class="cap">&nbsp;</span>${lines(FN, 'f', '// the function')}</pre>`;
+}
+function barHTML(p){
+  const m = META[p], last = STATES.length - 1;
+  const badge = m.badge ? `<span class="badge${/false/.test(m.badge) ? ' f' : ''}">${esc(m.badge)}</span>` : '';
+  let h = `<summary><span class="tri">▸</span><span class="pg">${p} / ${last}</span>` +
+          `<span class="ttl">${p ? '<code>' + esc(m.title) + '</code>' : esc(m.title)}</span>${badge}` +
+          `<span class="crumb">${esc(CRUMB[p])}</span></summary>`;
+  if (p === 0) h += `<div class="body"><div></div><div><p class="plain">Use → to start.</p></div></div>`;
+  else h += `<div class="body">${codeBlock(p)}<div><p class="plain">${m.plain || ''}</p>` +
+            `${m.note ? `<p class="note"><b>Note.</b> ${m.note}</p>` : ''}` +
+            `<p class="hint">Click any value in the picture to trace where it came from.</p></div></div>`;
+  return h;
+}
+function coverHTML(){
+  return `<div class="cover">
+  <h1>Concatenation of Array, traced in memory</h1>
+  <p class="sub">Given <code>nums</code> of length n, build <code>ans</code> of length 2n where
+  <code>ans[i] == nums[i]</code> and <code>ans[i + n] == nums[i]</code>. Example input: <code>nums = [1, 2, 1]</code>
+  → <code>[1, 2, 1, 1, 2, 1]</code>.</p>
+  <div class="two">
+    <div>${codeBlock(-1).replace('<pre class="code">', '<pre class="code">')}</div>
+    <div>
+      <b>How to read this deck</b>
+      <table>
+        <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>previous / next step</td></tr>
+        <tr><td><kbd>v</kbd></td><td>switch between <b>boxes</b> (how to think about it) and <b>bytes</b> (what is really in memory)</td></tr>
+        <tr><td><kbd>r</kbd></td><td>replay the animation on this page</td></tr>
+        <tr><td><kbd>+</kbd> <kbd>−</kbd> <kbd>0</kbd></td><td>resize the picture / reset</td></tr>
+        <tr><td><kbd>Home</kbd> <kbd>End</kbd></td><td>cover / last page</td></tr>
+        <tr><td>click a value</td><td>trace where it came from</td></tr>
+      </table>
+      <p class="note" style="margin-top:12px"><span style="background:#FAEEDA;color:#854F0B;padding:0 4px;border:1px solid #854F0B;border-radius:3px">amber</span>
+      always means "changed by this step". Everything the step did not touch is faded.</p>
+      <p class="note">Addresses are shortened (real ones look like 0x7ffd5a3c1e20) but the arithmetic is exact.</p>
+    </div>
+  </div>
+  <p class="go">Press → to start.</p>
+</div>`;
+}
+function traceHTML(key, p){
+  const chain = trace(key, p);
+  let h = `<button class="x" data-act="close" title="close">×</button><h3>Where <code>${esc(NAME[key])}</code> = <code>${esc(show(key, lastKnown(key, p)))}</code> came from</h3><ol>`;
+  if (!chain.length) h += '<li>Not set yet.</li>';
+  chain.forEach(c => {
+    h += `<li><code>${esc(SHORT[c.key])} = ${esc(show(c.key, c.val))}</code>, set on <a data-go="${c.page}">page ${c.page}</a> by <code>${esc(srcLine(c.page))}</code>` +
+         (c.from ? `, copied from <code>${esc(NAME[c.from])}</code>` : c.why ? `: ${esc(c.why)}` : '') + '</li>';
+  });
+  return h + '</ol>';
+}
+
+/* =====================================================================
+   Interaction
+   ===================================================================== */
+const ZOOMS = [.6, .75, .9, 1, 1.2, 1.5, 2, 2.5, 3, 4];
+let page = 0, view = 'model', zi = 3, barOpen = typeof window === 'undefined' || !window.innerWidth || window.innerWidth > 760;
+const $ = id => document.getElementById(id);
+
+function renderPic(){
+  $('pic').innerHTML = page === 0 ? coverHTML() : (view === 'model' ? modelSVG(page) : bytesSVG(page));
+}
+function render(){
+  const sc = $('scroll'); const top = sc.scrollTop;
+  const bar = $('bar'); bar.innerHTML = barHTML(page); bar.open = barOpen;
+  renderPic();
+  sc.scrollTop = page === 0 ? 0 : top;
+  document.querySelectorAll('[data-act=view]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === view)));
+  $('detail').hidden = true;
+}
+function go(p){ page = Math.max(0, Math.min(STATES.length - 1, p)); render(); }
+function setView(v){ view = v || (view === 'model' ? 'bytes' : 'model'); render(); }
+function replay(){ renderPic(); }
+function zoomTo(i){ zi = Math.max(0, Math.min(ZOOMS.length - 1, i)); $('pic').style.setProperty('--z', ZOOMS[zi]); $('zv').textContent = Math.round(ZOOMS[zi] * 100) + '%'; }
+function showTrace(k){ if (page === 0) return; const d = $('detail'); d.innerHTML = traceHTML(k, page); d.hidden = false; }
+
+function init(){
+  $('bar').addEventListener('toggle', () => { barOpen = $('bar').open; });
+  $('controls').addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    const a = b.dataset.act;
+    if (a === 'prev') go(page - 1); else if (a === 'next') go(page + 1);
+    else if (a === 'view') setView(b.dataset.v);
+    else if (a === 'replay') replay();
+    else if (a === 'zin') zoomTo(zi + 1); else if (a === 'zout') zoomTo(zi - 1);
+  });
+  $('pic').addEventListener('click', e => { const g = e.target.closest('[data-k]'); if (g) showTrace(g.getAttribute('data-k')); });
+  $('detail').addEventListener('click', e => {
+    const a = e.target.closest('[data-go]'); if (a) { go(+a.dataset.go); return; }
+    if (e.target.closest('[data-act=close]')) $('detail').hidden = true;
+  });
+  document.addEventListener('keydown', e => {
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const k = e.key;
+    if (k === 'ArrowRight' || k === 'PageDown') go(page + 1);
+    else if (k === 'ArrowLeft' || k === 'PageUp') go(page - 1);
+    else if (k === 'Home') go(0); else if (k === 'End') go(STATES.length - 1);
+    else if (k === 'v') setView();
+    else if (k === 'r') replay();
+    else if (k === '+' || k === '=') zoomTo(zi + 1);
+    else if (k === '-' || k === '_') zoomTo(zi - 1);
+    else if (k === '0') zoomTo(3);
+    else if (k === 'Escape') $('detail').hidden = true;
+    else return;
+    e.preventDefault();
+  });
+  zoomTo(zi); render();
+}
+if (typeof window !== 'undefined' && document.getElementById('app')) init();
+</script>
+</body>
+</html>
